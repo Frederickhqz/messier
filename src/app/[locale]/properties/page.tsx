@@ -181,6 +181,12 @@ export default function PropertiesPage() {
       if (data.mainPhoto) propertyData.mainPhoto = data.mainPhoto;
       if (data.photos) propertyData.photos = data.photos.slice(0, 5);
       
+      console.log('Saving property:', propertyData);
+      
+      // Save to Firestore
+      const docRef = await addDoc(collection(db, 'properties'), propertyData);
+      console.log('Property saved with ID:', docRef.id);
+      
       // Reset form
       setShowModal(false);
       setShowPreview(false);
@@ -194,7 +200,7 @@ export default function PropertiesPage() {
       loadProperties();
     } catch (error) {
       console.error('Error saving property:', error);
-      alert('Failed to save property');
+      alert('Failed to save property: ' + (error as Error).message);
     } finally {
       setSaving(false);
     }
