@@ -185,6 +185,9 @@ export async function GET(request: NextRequest) {
             const rentcastData = await rentcastResponse.json();
             
             if (rentcastData) {
+              // Store full RentCast response for admin use
+              propertyData.rentcastData = rentcastData;
+              
               propertyData = {
                 ...propertyData,
                 propertyType: rentcastData.propertyType || 'house',

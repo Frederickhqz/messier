@@ -180,6 +180,7 @@ export default function PropertiesPage() {
       if (data.longitude) propertyData.longitude = data.longitude;
       if (data.mainPhoto) propertyData.mainPhoto = data.mainPhoto;
       if (data.photos) propertyData.photos = data.photos.slice(0, 5);
+      if (data.rentcastData) propertyData.rentcastData = data.rentcastData;
       
       console.log('Saving property:', propertyData);
       

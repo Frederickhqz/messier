@@ -81,6 +81,9 @@ export interface Property {
   
   // Walkthrough steps
   walkthroughSteps?: string[];
+  
+  // Full RentCast response (called once at creation, stored for admin use)
+  rentcastData?: Record<string, any>;
 }
 
 // User profile (extends Firebase Auth)
