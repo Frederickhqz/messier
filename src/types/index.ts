@@ -19,6 +19,21 @@ export interface RoomConfig {
   count: number;
 }
 
+// Bed sizes
+export type BedSize = 'king' | 'queen' | 'full' | 'twin' | 'twinXL' | 'californiaKing';
+
+export interface BedroomConfig {
+  roomNumber: number;
+  name?: string; // e.g., "Master Bedroom"
+  beds: Array<{
+    size: BedSize;
+    quantity: number;
+  }>;
+}
+
+// Property type
+export type PropertyType = 'house' | 'apartment' | 'condo' | 'townhouse' | 'villa' | 'cabin' | 'other';
+
 // Property
 export interface Property {
   id: string;
@@ -29,7 +44,43 @@ export interface Property {
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
-  walkthroughSteps?: string[]; // step IDs
+  
+  // Enriched data
+  enriched?: boolean;
+  placeId?: string;
+  
+  // Property details
+  propertyType?: PropertyType;
+  bedrooms?: number;
+  bathrooms?: number;
+  halfBathrooms?: number;
+  squareFeet?: number;
+  yearBuilt?: number;
+  lotSize?: number;
+  
+  // Bedroom configuration
+  bedroomConfig?: BedroomConfig[];
+  
+  // Photos
+  photos?: string[];
+  mainPhoto?: string;
+  
+  // Description
+  description?: string;
+  
+  // Location
+  latitude?: number;
+  longitude?: number;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  
+  // Amenities
+  amenities?: string[];
+  
+  // Walkthrough steps
+  walkthroughSteps?: string[];
 }
 
 // User profile (extends Firebase Auth)
