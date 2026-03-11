@@ -179,43 +179,57 @@ export async function GET(request: NextRequest) {
       
       if (process.env.RENTCAST_API_KEY) {
         try {
-          const rentcastUrl = `https://api.rentcast.io/v1/property?address=${encodeURIComponent(address)}`;
-          console.log('Calling RentCast:', rentcastUrl);
+          // Try different address formats for RentCast
+          // Format 1: Full address as provided
+          const addressFormats = [
+            address, // Original
+            address.replace(/,\s*USA$/i, '').replace(/,\s*United States$/i, ''), // Remove country
+            address.split(',').slice(0, 2).join(','), // Street + City only
+          ];
           
-          const rentcastResponse = await fetch(rentcastUrl, {
-            headers: {
-              'X-Api-Key': process.env.RENTCAST_API_KEY
-            }
-          });
+          let rentcastData = null;
           
-          console.log('RentCast status:', rentcastResponse.status);
-          
-          if (rentcastResponse.ok) {
-            const rentcastData = await rentcastResponse.json();
-            console.log('RentCast response:', JSON.stringify(rentcastData, null, 2));
+          for (const addr of addressFormats) {
+            const rentcastUrl = `https://api.rentcast.io/v1/property?address=${encodeURIComponent(addr)}`;
+            console.log('Trying RentCast:', addr);
             
-            if (rentcastData && Object.keys(rentcastData).length > 0) {
-              // Store full RentCast response for admin use
-              propertyData.rentcastData = rentcastData;
-              
-              // Map RentCast fields to our schema
-              if (rentcastData.propertyType) propertyData.propertyType = rentcastData.propertyType;
-              if (rentcastData.bedrooms) propertyData.bedrooms = rentcastData.bedrooms;
-              if (rentcastData.bathrooms) propertyData.bathrooms = rentcastData.bathrooms;
-              if (rentcastData.squareFootage) propertyData.squareFeet = rentcastData.squareFootage;
-              if (rentcastData.yearBuilt) propertyData.yearBuilt = rentcastData.yearBuilt;
-              if (rentcastData.lotSize) propertyData.lotSize = rentcastData.lotSize;
-              
-              if (rentcastData.bedrooms) {
-                propertyData.bedroomConfig = generateBedroomConfig(rentcastData.bedrooms);
+            const rentcastResponse = await fetch(rentcastUrl, {
+              headers: {
+                'X-Api-Key': process.env.RENTCAST_API_KEY
               }
-              
-              console.log('Enriched property data:', JSON.stringify(propertyData, null, 2));
+            });
+            
+            console.log('RentCast status:', rentcastResponse.status);
+            
+            if (rentcastResponse.ok) {
+              rentcastData = await rentcastResponse.json();
+              console.log('RentCast response:', JSON.stringify(rentcastData, null, 2));
+              break;
+            } else {
+              const errorText = await rentcastResponse.text();
+              console.log('RentCast not found for format:', addr);
             }
+          }
+            
+          if (rentcastData && Object.keys(rentcastData).length > 0) {
+            // Store full RentCast response for admin use
+            propertyData.rentcastData = rentcastData;
+            
+            // Map RentCast fields to our schema
+            if (rentcastData.propertyType) propertyData.propertyType = rentcastData.propertyType;
+            if (rentcastData.bedrooms) propertyData.bedrooms = rentcastData.bedrooms;
+            if (rentcastData.bathrooms) propertyData.bathrooms = rentcastData.bathrooms;
+            if (rentcastData.squareFootage) propertyData.squareFeet = rentcastData.squareFootage;
+            if (rentcastData.yearBuilt) propertyData.yearBuilt = rentcastData.yearBuilt;
+            if (rentcastData.lotSize) propertyData.lotSize = rentcastData.lotSize;
+            
+            if (rentcastData.bedrooms) {
+              propertyData.bedroomConfig = generateBedroomConfig(rentcastData.bedrooms);
+            }
+            
+            console.log('Enriched property data:', JSON.stringify(propertyData, null, 2));
           } else {
-            const errorText = await rentcastResponse.text();
-            console.log('RentCast API not found for address (this is normal for some properties):', address);
-            // RentCast doesn't have this property - user can enter details manually
+            console.log('RentCast could not find property:', address);
             propertyData.rentcastNotFound = true;
           }
         } catch (e) {
