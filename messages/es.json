@@ -5,6 +5,7 @@
   },
   "nav": {
     "dashboard": "Panel",
+    "services": "Servicios",
     "properties": "Propiedades",
     "calendar": "Calendario",
     "team": "Equipo",
@@ -125,6 +126,8 @@
     "all": "Todos",
     "none": "Ninguno",
     "yes": "Sí",
-    "no": "No"
+    "no": "No",
+    "back": "Volver",
+    "notes": "Notas"
   }
 }

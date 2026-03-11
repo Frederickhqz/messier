@@ -129,13 +129,5 @@
     "no": "No",
     "back": "Back",
     "notes": "Notes"
-  },
-  "nav": {
-    "dashboard": "Dashboard",
-    "properties": "Properties",
-    "services": "Services",
-    "calendar": "Calendar",
-    "team": "Team",
-    "settings": "Settings"
   }
 }
