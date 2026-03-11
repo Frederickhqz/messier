@@ -175,36 +175,49 @@ export async function GET(request: NextRequest) {
       }
       
       // Try RentCast API for property details (if API key available)
+      console.log('RENTCAST_API_KEY available:', !!process.env.RENTCAST_API_KEY);
+      
       if (process.env.RENTCAST_API_KEY) {
         try {
-          const rentcastResponse = await fetch(
-            `https://api.rentcast.io/v1/property?address=${encodeURIComponent(address)}&key=${process.env.RENTCAST_API_KEY}`
-          );
+          const rentcastUrl = `https://api.rentcast.io/v1/property?address=${encodeURIComponent(address)}`;
+          console.log('Calling RentCast:', rentcastUrl);
+          
+          const rentcastResponse = await fetch(rentcastUrl, {
+            headers: {
+              'X-Api-Key': process.env.RENTCAST_API_KEY
+            }
+          });
+          
+          console.log('RentCast status:', rentcastResponse.status);
           
           if (rentcastResponse.ok) {
             const rentcastData = await rentcastResponse.json();
+            console.log('RentCast response:', JSON.stringify(rentcastData, null, 2));
             
-            if (rentcastData) {
+            if (rentcastData && Object.keys(rentcastData).length > 0) {
               // Store full RentCast response for admin use
               propertyData.rentcastData = rentcastData;
               
-              propertyData = {
-                ...propertyData,
-                propertyType: rentcastData.propertyType || 'house',
-                bedrooms: rentcastData.bedrooms,
-                bathrooms: rentcastData.bathrooms,
-                squareFeet: rentcastData.squareFootage,
-                yearBuilt: rentcastData.yearBuilt,
-                lotSize: rentcastData.lotSize
-              };
+              // Map RentCast fields to our schema
+              if (rentcastData.propertyType) propertyData.propertyType = rentcastData.propertyType;
+              if (rentcastData.bedrooms) propertyData.bedrooms = rentcastData.bedrooms;
+              if (rentcastData.bathrooms) propertyData.bathrooms = rentcastData.bathrooms;
+              if (rentcastData.squareFootage) propertyData.squareFeet = rentcastData.squareFootage;
+              if (rentcastData.yearBuilt) propertyData.yearBuilt = rentcastData.yearBuilt;
+              if (rentcastData.lotSize) propertyData.lotSize = rentcastData.lotSize;
               
               if (rentcastData.bedrooms) {
                 propertyData.bedroomConfig = generateBedroomConfig(rentcastData.bedrooms);
               }
+              
+              console.log('Enriched property data:', JSON.stringify(propertyData, null, 2));
             }
+          } else {
+            const errorText = await rentcastResponse.text();
+            console.log('RentCast API error:', rentcastResponse.status, errorText);
           }
         } catch (e) {
-          console.log('RentCast API not available:', e);
+          console.log('RentCast API exception:', e);
         }
       }
       
