@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Google Places API for address autocomplete and details
-// RentCast API for property data
+// Uses the Firebase API key (same project, Places API enabled)
+const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     
     try {
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&types=address&key=${process.env.GOOGLE_PLACES_API_KEY}`
+        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&types=address&key=${GOOGLE_API_KEY}`
       );
       const data = await response.json();
       
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     
     try {
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_address,geometry,photos,name,types&key=${process.env.GOOGLE_PLACES_API_KEY}`
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_address,geometry,photos,name,types&key=${GOOGLE_API_KEY}`
       );
       const data = await response.json();
       
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       let photos: string[] = [];
       if (result.photos && result.photos.length > 0) {
         photos = result.photos.slice(0, 5).map((photo: any) => 
-          `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${photo.photo_reference}&key=${process.env.GOOGLE_PLACES_API_KEY}`
+          `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${photo.photo_reference}&key=${GOOGLE_API_KEY}`
         );
       }
       
@@ -111,9 +111,9 @@ export async function GET(request: NextRequest) {
       };
       
       // If we have a placeId, get Google Places data first
-      if (placeId && process.env.GOOGLE_PLACES_API_KEY) {
+      if (placeId && GOOGLE_API_KEY) {
         const placesResponse = await fetch(
-          `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_address,geometry,photos,name,types&key=${process.env.GOOGLE_PLACES_API_KEY}`
+          `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_address,geometry,photos,name,types&key=${GOOGLE_API_KEY}`
         );
         const placesData = await placesResponse.json();
         
@@ -126,9 +126,9 @@ export async function GET(request: NextRequest) {
           
           // Get first photo as main photo
           if (result.photos && result.photos.length > 0) {
-            propertyData.mainPhoto = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${result.photos[0].photo_reference}&key=${process.env.GOOGLE_PLACES_API_KEY}`;
+            propertyData.mainPhoto = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${result.photos[0].photo_reference}&key=${GOOGLE_API_KEY}`;
             propertyData.photos = result.photos.slice(0, 5).map((photo: any) =>
-              `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${photo.photo_reference}&key=${process.env.GOOGLE_PLACES_API_KEY}`
+              `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${photo.photo_reference}&key=${GOOGLE_API_KEY}`
             );
           }
         }
