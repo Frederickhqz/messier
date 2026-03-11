@@ -128,6 +128,12 @@
     "yes": "Sí",
     "no": "No",
     "back": "Volver",
-    "notes": "Notas"
+    "notes": "Notas",
+    "offline": {
+      "title": "Modo Sin Conexión",
+      "message": "Los cambios se sincronizarán cuando vuelvas a estar en línea",
+      "online": "En Línea",
+      "synced": "Sincronizado"
+    }
   }
 }

@@ -128,6 +128,12 @@
     "yes": "Yes",
     "no": "No",
     "back": "Back",
-    "notes": "Notes"
+    "notes": "Notes",
+    "offline": {
+      "title": "Offline Mode",
+      "message": "Changes will sync when you're back online",
+      "online": "Online",
+      "synced": "Synced"
+    }
   }
 }

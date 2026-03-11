@@ -3,6 +3,7 @@ import {getMessages} from 'next-intl/server';
 import {notFound} from 'next/navigation';
 import {locales} from '@/i18n';
 import {AuthProvider} from '@/lib/auth-context';
+import {OfflineProvider} from '@/lib/offline-context';
 
 export default async function LocaleLayout({
   children,
@@ -20,7 +21,9 @@ export default async function LocaleLayout({
   return (
     <NextIntlClientProvider messages={messages}>
       <AuthProvider>
-        {children}
+        <OfflineProvider>
+          {children}
+        </OfflineProvider>
       </AuthProvider>
     </NextIntlClientProvider>
   );

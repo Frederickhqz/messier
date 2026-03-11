@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/auth-context';
+import { OfflineIndicator } from '@/components/offline-indicator';
 import { 
   Home, 
   Building2, 
@@ -53,6 +54,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Offline indicator */}
+      <OfflineIndicator />
+      
       {/* Mobile sidebar toggle */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white shadow-sm px-4 py-3 flex items-center justify-between">
         <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-lg hover:bg-gray-100">
