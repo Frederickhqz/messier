@@ -1,7 +1,7 @@
 // Walkthrough item within a space (bed, toilet, sink, etc.)
 export interface WalkthroughItem {
   id: string;
-  name: string; // "Bunk bed", "Twin bed", "Toilet", "Sink", etc.
+  name: string; // "Bunk Bed", "Twin Bed", "Toilet", "Sink", etc.
   type: ItemType;
   subType?: string; // "full+twin" for bunk bed, "single" for sink, etc.
   photoRequests: PhotoRequest[];
@@ -29,6 +29,7 @@ export interface WalkthroughSpace {
   id: string;
   name: string; // "Bedroom 1", "Master Bedroom", "Shared Bathroom", "Pool"
   type: SpaceType;
+  location?: string; // "First floor on the right", "Second floor, left of stairs"
   order: number;
   
   // Items within this space (beds, furniture, fixtures)
@@ -58,7 +59,6 @@ export interface PhotoRequest {
   id: string;
   instruction: string; // "Take photo under the bed"
   instructionTranslations?: Record<string, string>;
-  location?: string; // "Behind nightstand", "Under bed"
   hint?: string;
   hintTranslations?: Record<string, string>;
   required: boolean;
@@ -74,4 +74,15 @@ export interface WalkthroughConfig {
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
+}
+
+// Bed count aggregation for linen calculations
+export interface BedCount {
+  king: number;
+  queen: number;
+  full: number;
+  twin: number;
+  twinXL: number;
+  californiaKing: number;
+  total: number;
 }

@@ -4,25 +4,11 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import DashboardLayout from '@/components/dashboard-layout';
-import { collection, doc, getDoc, getDocs, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Property } from '@/types';
-import { WalkthroughSpace, WalkthroughItem, PhotoRequest, SpaceType, ItemType } from '@/types/walkthrough';
-import { Plus, Trash2, ChevronDown, ChevronUp, Save, Loader2, Languages, Bed, Bath, Home, TreePalm, Waves, X, GripVertical } from 'lucide-react';
-
-const spaceTypeIcons: Record<SpaceType, any> = {
-  bedroom: Bed,
-  bathroom: Bath,
-  kitchen: Home,
-  livingRoom: Home,
-  diningRoom: Home,
-  office: Home,
-  garage: Home,
-  patio: TreePalm,
-  pool: Waves,
-  laundry: Home,
-  other: Home
-};
+import { WalkthroughSpace, WalkthroughItem, PhotoRequest, SpaceType, ItemType, BedCount } from '@/types/walkthrough';
+import { Plus, Trash2, ChevronDown, ChevronUp, Save, Loader2, GripVertical, X, MapPin, Bed } from 'lucide-react';
 
 const spaceTypeLabels: Record<SpaceType, string> = {
   bedroom: 'Bedroom',
@@ -56,19 +42,19 @@ const itemTypeLabels: Record<ItemType, string> = {
 };
 
 const bedSubTypes = [
-  { value: 'king', label: 'King' },
-  { value: 'queen', label: 'Queen' },
-  { value: 'full', label: 'Full/Double' },
-  { value: 'twin', label: 'Twin' },
-  { value: 'twinXL', label: 'Twin XL' },
-  { value: 'californiaKing', label: 'California King' }
+  { value: 'king', label: 'King', sheets: 'King sheets' },
+  { value: 'queen', label: 'Queen', sheets: 'Queen sheets' },
+  { value: 'full', label: 'Full/Double', sheets: 'Full sheets' },
+  { value: 'twin', label: 'Twin', sheets: 'Twin sheets' },
+  { value: 'twinXL', label: 'Twin XL', sheets: 'Twin XL sheets' },
+  { value: 'californiaKing', label: 'California King', sheets: 'Cal King sheets' }
 ];
 
 const bunkBedConfigs = [
-  { value: 'full+twin', label: 'Full + Twin Bunk' },
-  { value: 'twin+twin', label: 'Twin + Twin Bunk' },
-  { value: 'queen+twin', label: 'Queen + Twin Bunk' },
-  { value: 'full+full', label: 'Full + Full Bunk' }
+  { value: 'twin+twin', label: 'Twin + Twin Bunk', sheets: ['Twin sheets', 'Twin sheets'] },
+  { value: 'full+twin', label: 'Full + Twin Bunk', sheets: ['Full sheets', 'Twin sheets'] },
+  { value: 'queen+twin', label: 'Queen + Twin Bunk', sheets: ['Queen sheets', 'Twin sheets'] },
+  { value: 'full+full', label: 'Full + Full Bunk', sheets: ['Full sheets', 'Full sheets'] }
 ];
 
 const sinkSubTypes = [
@@ -88,6 +74,8 @@ export default function WalkthroughConfigPage() {
   const [saving, setSaving] = useState(false);
   const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set());
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [draggedSpace, setDraggedSpace] = useState<string | null>(null);
+  const [draggedItem, setDraggedItem] = useState<{spaceId: string, itemId: string} | null>(null);
   
   const propertyId = params.id as string;
 
@@ -118,9 +106,6 @@ export default function WalkthroughConfigPage() {
         })) as WalkthroughSpace[];
         spacesData.sort((a, b) => a.order - b.order);
         setSpaces(spacesData);
-      } else {
-        const initialSpaces = generateInitialSpaces(propertyData);
-        setSpaces(initialSpaces);
       }
     } catch (error) {
       console.error('Error loading walkthrough:', error);
@@ -129,186 +114,97 @@ export default function WalkthroughConfigPage() {
     }
   };
 
-  const generateInitialSpaces = (property: Property): WalkthroughSpace[] => {
-    const spaces: WalkthroughSpace[] = [];
-    let order = 0;
+  // Calculate bed counts from spaces
+  const calculateBedCounts = (): BedCount => {
+    const counts: BedCount = {
+      king: 0,
+      queen: 0,
+      full: 0,
+      twin: 0,
+      twinXL: 0,
+      californiaKing: 0,
+      total: 0
+    };
     
-    // Add bedrooms from bedroom config
-    if (property.bedroomConfig && property.bedroomConfig.length > 0) {
-      property.bedroomConfig.forEach((room, index) => {
-        const items: WalkthroughItem[] = [];
-        
-        // Add beds based on config
-        room.beds.forEach((bed, bedIndex) => {
-          items.push({
-            id: `bed-${bedIndex}`,
-            name: bed.quantity > 1 ? `${bed.quantity}× ${bed.size}` : `${bed.size.charAt(0).toUpperCase() + bed.size.slice(1)} Bed`,
-            type: 'bed',
-            subType: bed.size,
-            photoRequests: generateDefaultBedPhotos(bed.size),
-            order: bedIndex
-          });
-        });
-        
-        // Add overall room request
-        items.push({
-          id: 'room-overall',
-          name: 'Overall Room',
-          type: 'other',
-          photoRequests: [{
-            id: 'overall-photo',
-            instruction: 'Take overall photo of room',
-            location: 'Doorway',
-            required: true,
-            multiplePhotos: false,
-            order: 0
-          }],
-          order: items.length
-        });
-        
-        spaces.push({
-          id: `bedroom-${index}`,
-          name: room.name || `Bedroom ${index + 1}`,
-          type: 'bedroom',
-          order: order++,
-          items,
-          photoRequests: []
-        });
-        
-        // Add ensuite if exists
-        if (room.bathroomType === 'full') {
-          spaces.push({
-            id: `bathroom-ensuite-${index}`,
-            name: `${room.name || `Bedroom ${index + 1}`} Bathroom`,
-            type: 'bathroom',
-            order: order++,
-            items: generateBathroomItems(),
-            photoRequests: []
-          });
-        } else if (room.bathroomType === 'half') {
-          spaces.push({
-            id: `bathroom-ensuite-${index}`,
-            name: `${room.name || `Bedroom ${index + 1}`} Half Bath`,
-            type: 'bathroom',
-            order: order++,
-            items: generateHalfBathItems(),
-            photoRequests: []
-          });
+    spaces.forEach(space => {
+      space.items?.forEach(item => {
+        if (item.type === 'bed' && item.subType) {
+          counts[item.subType as keyof BedCount]++;
+          counts.total++;
+        } else if (item.type === 'bunkbed' && item.subType) {
+          const config = bunkBedConfigs.find(c => c.value === item.subType);
+          if (config) {
+            // Parse bunk bed config (e.g., "twin+twin" = 2 twin beds)
+            const [bed1, bed2] = item.subType.split('+');
+            if (bed1) counts[bed1 as keyof BedCount]++;
+            if (bed2) counts[bed2 as keyof BedCount]++;
+            counts.total += 2;
+          }
         }
       });
-    }
-    
-    // Add shared bathrooms
-    const ensuiteBathrooms = property.bedroomConfig?.filter(r => r.bathroomType === 'full').length || 0;
-    const ensuiteHalfBaths = property.bedroomConfig?.filter(r => r.bathroomType === 'half').length || 0;
-    const remainingFullBaths = (property.bathrooms || 0) - ensuiteBathrooms;
-    const remainingHalfBaths = (property.halfBathrooms || 0) - ensuiteHalfBaths;
-    
-    for (let i = 0; i < remainingFullBaths; i++) {
-      spaces.push({
-        id: `bathroom-shared-${i}`,
-        name: `Shared Bathroom ${i + 1}`,
-        type: 'bathroom',
-        order: order++,
-        items: generateBathroomItems(),
-        photoRequests: [],
-        sharedWith: spaces.filter(s => s.type === 'bedroom').map(s => s.id)
-      });
-    }
-    
-    for (let i = 0; i < remainingHalfBaths; i++) {
-      spaces.push({
-        id: `halfbath-${i}`,
-        name: `Half Bath ${i + 1}`,
-        type: 'bathroom',
-        order: order++,
-        items: generateHalfBathItems(),
-        photoRequests: [],
-        sharedWith: []
-      });
-    }
-    
-    // Add kitchen
-    spaces.push({
-      id: 'kitchen',
-      name: 'Kitchen',
-      type: 'kitchen',
-      order: order++,
-      items: generateKitchenItems(),
-      photoRequests: []
     });
     
-    // Add living room
-    spaces.push({
-      id: 'livingroom',
-      name: 'Living Room',
-      type: 'livingRoom',
-      order: order++,
-      items: generateLivingRoomItems(),
-      photoRequests: []
-    });
-    
-    return spaces;
+    return counts;
   };
 
-  const generateDefaultBedPhotos = (bedSize: string): PhotoRequest[] => ([
-    { id: 'bed-made', instruction: 'Take photo of bed made', location: 'Center of room', required: true, multiplePhotos: false, order: 0 },
-    { id: 'bed-under', instruction: 'Take photo under the bed', location: 'Lift bed skirt if present', hint: 'Check for forgotten items', required: false, multiplePhotos: false, order: 1 },
-    { id: 'bed-pillows', instruction: 'Take photo of pillows', location: 'Above bed', required: true, multiplePhotos: false, order: 2 }
-  ]);
+  // Drag and drop for spaces
+  const handleSpaceDragStart = (spaceId: string) => {
+    setDraggedSpace(spaceId);
+  };
 
-  const generateBathroomItems = (): WalkthroughItem[] => ([
-    { id: 'toilet', name: 'Toilet', type: 'toilet', photoRequests: [
-      { id: 'toilet-seat', instruction: 'Take photo of toilet with seat down', location: 'Side angle', required: true, multiplePhotos: false, order: 0 },
-      { id: 'toilet-base', instruction: 'Take photo around toilet base', location: 'Floor level', hint: 'Check for stains', required: true, multiplePhotos: false, order: 1 }
-    ], order: 0 },
-    { id: 'sink', name: 'Sink', type: 'sink', subType: 'single', photoRequests: [
-      { id: 'sink-counter', instruction: 'Take photo of sink and counter', location: 'In front of sink', required: true, multiplePhotos: false, order: 0 },
-      { id: 'sink-drain', instruction: 'Take photo of drain', location: 'Above sink', hint: 'Ensure drain is clean', required: true, multiplePhotos: false, order: 1 }
-    ], order: 1 },
-    { id: 'shower', name: 'Shower', type: 'shower', photoRequests: [
-      { id: 'shower-overall', instruction: 'Take photo of shower area', location: 'Inside shower or doorway', required: true, multiplePhotos: false, order: 0 },
-      { id: 'shower-floor', instruction: 'Take photo of shower floor', location: 'Looking down', hint: 'Check for hair or debris', required: true, multiplePhotos: false, order: 1 }
-    ], order: 2 },
-    { id: 'tub', name: 'Bathtub', type: 'bathtub', photoRequests: [
-      { id: 'tub-overall', instruction: 'Take photo of bathtub', location: 'Side angle', required: true, multiplePhotos: false, order: 0 },
-      { id: 'tub-clean', instruction: 'Take photo of tub interior', location: 'Above tub', required: true, multiplePhotos: false, order: 1 }
-    ], order: 3 },
-    { id: 'towels', name: 'Towels', type: 'other', photoRequests: [
-      { id: 'towels', instruction: 'Take photo of towel arrangement', location: 'Towel rack or shelf', required: true, multiplePhotos: false, order: 0 }
-    ], order: 4 }
-  ]);
+  const handleSpaceDragOver = (e: React.DragEvent, targetSpaceId: string) => {
+    e.preventDefault();
+    if (!draggedSpace || draggedSpace === targetSpaceId) return;
+    
+    const newSpaces = [...spaces];
+    const draggedIndex = newSpaces.findIndex(s => s.id === draggedSpace);
+    const targetIndex = newSpaces.findIndex(s => s.id === targetSpaceId);
+    
+    const [removed] = newSpaces.splice(draggedIndex, 1);
+    newSpaces.splice(targetIndex, 0, removed);
+    
+    newSpaces.forEach((space, index) => {
+      space.order = index;
+    });
+    
+    setSpaces(newSpaces);
+  };
 
-  const generateHalfBathItems = (): WalkthroughItem[] => ([
-    { id: 'toilet', name: 'Toilet', type: 'toilet', photoRequests: [
-      { id: 'toilet-seat', instruction: 'Take photo of toilet with seat down', location: 'Side angle', required: true, multiplePhotos: false, order: 0 }
-    ], order: 0 },
-    { id: 'sink', name: 'Sink', type: 'sink', subType: 'single', photoRequests: [
-      { id: 'sink-counter', instruction: 'Take photo of sink and counter', location: 'In front of sink', required: true, multiplePhotos: false, order: 0 }
-    ], order: 1 }
-  ]);
+  const handleSpaceDragEnd = () => {
+    setDraggedSpace(null);
+  };
 
-  const generateKitchenItems = (): WalkthroughItem[] => ([
-    { id: 'counters', name: 'Countertops', type: 'other', photoRequests: [
-      { id: 'counter-overall', instruction: 'Take photo of clean countertops', location: 'Center of kitchen', required: true, multiplePhotos: false, order: 0 }
-    ], order: 0 },
-    { id: 'sink', name: 'Sink', type: 'sink', photoRequests: [
-      { id: 'sink-clean', instruction: 'Take photo of sink area', location: 'In front of sink', hint: 'Sink should be empty and clean', required: true, multiplePhotos: false, order: 0 }
-    ], order: 1 },
-    { id: 'appliances', name: 'Appliances', type: 'appliances', photoRequests: [
-      { id: 'stove', instruction: 'Take photo of stove/cooktop', location: 'Front angle', required: true, multiplePhotos: false, order: 0 },
-      { id: 'fridge', instruction: 'Take photo of refrigerator', location: 'Front angle', required: true, multiplePhotos: false, order: 1 }
-    ], order: 2 }
-  ]);
+  // Drag and drop for items within a space
+  const handleItemDragStart = (spaceId: string, itemId: string) => {
+    setDraggedItem({ spaceId, itemId });
+  };
 
-  const generateLivingRoomItems = (): WalkthroughItem[] => ([
-    { id: 'sofa', name: 'Sofa', type: 'sofa', photoRequests: [
-      { id: 'sofa-overall', instruction: 'Take photo of sofa/seating area', location: 'Center of room', hint: 'Fluff pillows', required: true, multiplePhotos: false, order: 0 }
-    ], order: 0 },
-    { id: 'tv', name: 'TV Area', type: 'tv', photoRequests: [
-      { id: 'tv-clean', instruction: 'Take photo of TV screen', location: 'Front', hint: 'Clean screen if dusty', required: true, multiplePhotos: false, order: 0 }
-    ], order: 1 }
-  ]);
+  const handleItemDragOver = (e: React.DragEvent, spaceId: string, targetItemId: string) => {
+    e.preventDefault();
+    if (!draggedItem || draggedItem.spaceId !== spaceId || draggedItem.itemId === targetItemId) return;
+    
+    setSpaces(prevSpaces => {
+      const newSpaces = [...prevSpaces];
+      const spaceIndex = newSpaces.findIndex(s => s.id === spaceId);
+      const space = newSpaces[spaceIndex];
+      
+      const draggedIndex = space.items.findIndex(i => i.id === draggedItem.itemId);
+      const targetIndex = space.items.findIndex(i => i.id === targetItemId);
+      
+      const [removed] = space.items.splice(draggedIndex, 1);
+      space.items.splice(targetIndex, 0, removed);
+      
+      space.items.forEach((item, index) => {
+        item.order = index;
+      });
+      
+      return newSpaces;
+    });
+  };
+
+  const handleItemDragEnd = () => {
+    setDraggedItem(null);
+  };
 
   // Space management
   const addSpace = (type: SpaceType) => {
@@ -316,14 +212,13 @@ export default function WalkthroughConfigPage() {
       id: `space-${Date.now()}`,
       name: `${spaceTypeLabels[type]} ${spaces.filter(s => s.type === type).length + 1}`,
       type,
+      location: '',
       order: spaces.length,
       items: [],
       photoRequests: []
     };
     setSpaces([...spaces, newSpace]);
-    const newExpanded = new Set(expandedSpaces);
-    newExpanded.add(newSpace.id);
-    setExpandedSpaces(newExpanded);
+    setExpandedSpaces(new Set([...expandedSpaces, newSpace.id]));
   };
 
   const removeSpace = (spaceId: string) => {
@@ -348,9 +243,7 @@ export default function WalkthroughConfigPage() {
     };
     
     updateSpace(spaceId, { items: [...space.items, newItem] });
-    const newExpanded = new Set(expandedItems);
-    newExpanded.add(newItem.id);
-    setExpandedItems(newExpanded);
+    setExpandedItems(new Set([...expandedItems, newItem.id]));
   };
 
   const removeItem = (spaceId: string, itemId: string) => {
@@ -375,7 +268,6 @@ export default function WalkthroughConfigPage() {
     const newRequest: PhotoRequest = {
       id: `photo-${Date.now()}`,
       instruction: '',
-      location: '',
       hint: '',
       required: true,
       multiplePhotos: false,
@@ -436,12 +328,35 @@ export default function WalkthroughConfigPage() {
   const saveWalkthrough = async () => {
     setSaving(true);
     try {
+      // Get existing space IDs
+      const existingSnapshot = await getDocs(
+        collection(db, 'properties', propertyId, 'walkthroughConfig')
+      );
+      const existingIds = existingSnapshot.docs.map(d => d.id);
+      
+      // Save each space
       for (const space of spaces) {
         await setDoc(
           doc(db, 'properties', propertyId, 'walkthroughConfig', space.id),
           space
         );
       }
+      
+      // Delete removed spaces
+      for (const id of existingIds) {
+        if (!spaces.find(s => s.id === id)) {
+          await deleteDoc(doc(db, 'properties', propertyId, 'walkthroughConfig', id));
+        }
+      }
+      
+      // Update bed counts on property
+      const bedCounts = calculateBedCounts();
+      await setDoc(doc(db, 'properties', propertyId), {
+        bedCounts,
+        bedroomCount: spaces.filter(s => s.type === 'bedroom').length,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      
       router.push(`/${locale}/properties/${propertyId}`);
     } catch (error) {
       console.error('Error saving walkthrough:', error);
@@ -463,6 +378,8 @@ export default function WalkthroughConfigPage() {
 
   if (!property) return null;
 
+  const bedCounts = calculateBedCounts();
+
   return (
     <DashboardLayout>
       <div className="max-w-5xl mx-auto space-y-6">
@@ -482,10 +399,28 @@ export default function WalkthroughConfigPage() {
           </button>
         </div>
 
+        {/* Bed Count Summary */}
+        <div className="bg-white rounded-xl shadow-sm p-4">
+          <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+            <Bed className="w-5 h-5" />
+            Bed Count Summary (for linen calculations)
+          </h3>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            {Object.entries(bedCounts).filter(([k]) => k !== 'total').map(([size, count]) => (
+              <div key={size} className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-primary-600">{count}</div>
+                <div className="text-sm text-gray-500 capitalize">{size}</div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-sm text-gray-500">
+            Total beds: {bedCounts.total} • Bedrooms: {spaces.filter(s => s.type === 'bedroom').length}
+          </p>
+        </div>
+
         {/* Add Space Buttons */}
         <div className="flex flex-wrap gap-2">
           {(['bedroom', 'bathroom', 'kitchen', 'livingRoom', 'pool', 'patio', 'other'] as SpaceType[]).map(type => {
-            const Icon = spaceTypeIcons[type];
             const count = spaces.filter(s => s.type === type).length;
             return (
               <button
@@ -493,8 +428,8 @@ export default function WalkthroughConfigPage() {
                 onClick={() => addSpace(type)}
                 className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
               >
-                <Icon className="w-4 h-4" />
-                <span>+ {spaceTypeLabels[type]}</span>
+                <Plus className="w-4 h-4" />
+                <span>{spaceTypeLabels[type]}</span>
                 {count > 0 && <span className="text-xs bg-gray-200 px-1.5 py-0.5 rounded">{count}</span>}
               </button>
             );
@@ -503,8 +438,15 @@ export default function WalkthroughConfigPage() {
 
         {/* Spaces */}
         <div className="space-y-4">
-          {spaces.map((space, index) => (
-            <div key={space.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+          {spaces.map((space) => (
+            <div 
+              key={space.id} 
+              className="bg-white rounded-xl shadow-sm overflow-hidden"
+              draggable
+              onDragStart={() => handleSpaceDragStart(space.id)}
+              onDragOver={(e) => handleSpaceDragOver(e, space.id)}
+              onDragEnd={handleSpaceDragEnd}
+            >
               {/* Space Header */}
               <div
                 className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50"
@@ -516,7 +458,6 @@ export default function WalkthroughConfigPage() {
                 }}
               >
                 <GripVertical className="w-5 h-5 text-gray-400 cursor-move" />
-                {spaceTypeIcons[space.type] && (() => { const Icon = spaceTypeIcons[space.type]; return <Icon className="w-5 h-5 text-primary-600" /> })()}
                 <div className="flex-1">
                   <input
                     type="text"
@@ -525,10 +466,12 @@ export default function WalkthroughConfigPage() {
                     onClick={(e) => e.stopPropagation()}
                     className="font-medium bg-transparent border-b border-transparent hover:border-gray-300 focus:border-primary-500 focus:outline-none"
                   />
-                  <div className="text-sm text-gray-500">
-                    {space.items.length} items • {space.photoRequests.length + space.items.reduce((sum, i) => sum + i.photoRequests.length, 0)} photo requests
-                    {space.sharedWith && space.sharedWith.length > 0 && ' • Shared'}
-                  </div>
+                  {space.location && (
+                    <div className="text-sm text-gray-500 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {space.location}
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); removeSpace(space.id); }}
@@ -542,26 +485,25 @@ export default function WalkthroughConfigPage() {
               {/* Space Details */}
               {expandedSpaces.has(space.id) && (
                 <div className="border-t p-4 space-y-4">
-                  {/* Shared toggle for bathrooms */}
-                  {space.type === 'bathroom' && (
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={space.sharedWith && space.sharedWith.length > 0}
-                        onChange={(e) => updateSpace(space.id, { 
-                          sharedWith: e.target.checked ? spaces.filter(s => s.type === 'bedroom').map(s => s.id) : [] 
-                        })}
-                        className="rounded border-gray-300 text-primary-600"
-                      />
-                      <span className="text-sm">Shared bathroom (accessible from multiple bedrooms)</span>
+                  {/* Location */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Location / Directions
                     </label>
-                  )}
+                    <input
+                      type="text"
+                      value={space.location || ''}
+                      onChange={(e) => updateSpace(space.id, { location: e.target.value })}
+                      placeholder="e.g., First floor, right of stairs"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
 
                   {/* Items */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-medium text-gray-700">Items in this space</h4>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         {space.type === 'bedroom' && (
                           <>
                             <button onClick={() => addItem(space.id, 'bed')} className="text-sm text-primary-600 hover:text-primary-700">+ Bed</button>
@@ -585,7 +527,14 @@ export default function WalkthroughConfigPage() {
                     ) : (
                       <div className="space-y-3">
                         {space.items.map((item) => (
-                          <div key={item.id} className="border border-gray-200 rounded-lg">
+                          <div 
+                            key={item.id} 
+                            className="border border-gray-200 rounded-lg"
+                            draggable
+                            onDragStart={() => handleItemDragStart(space.id, item.id)}
+                            onDragOver={(e) => handleItemDragOver(e, space.id, item.id)}
+                            onDragEnd={handleItemDragEnd}
+                          >
                             {/* Item Header */}
                             <div
                               className="flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50"
@@ -649,7 +598,7 @@ export default function WalkthroughConfigPage() {
                             {/* Item Photo Requests */}
                             {expandedItems.has(item.id) && (
                               <div className="border-t p-3 space-y-2 bg-gray-50">
-                                {item.photoRequests.map((req, reqIdx) => (
+                                {item.photoRequests.map((req) => (
                                   <div key={req.id} className="flex gap-2 items-start p-2 bg-white rounded">
                                     <div className="flex-1 space-y-2">
                                       <input
@@ -659,22 +608,13 @@ export default function WalkthroughConfigPage() {
                                         placeholder="Instruction (e.g., Take photo under the bed)"
                                         className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
                                       />
-                                      <div className="flex gap-2">
-                                        <input
-                                          type="text"
-                                          value={req.location || ''}
-                                          onChange={(e) => updatePhotoRequest(space.id, req.id, { location: e.target.value }, item.id)}
-                                          placeholder="Location (e.g., Behind nightstand)"
-                                          className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
-                                        />
-                                        <input
-                                          type="text"
-                                          value={req.hint || ''}
-                                          onChange={(e) => updatePhotoRequest(space.id, req.id, { hint: e.target.value }, item.id)}
-                                          placeholder="Hint (optional)"
-                                          className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
-                                        />
-                                      </div>
+                                      <input
+                                        type="text"
+                                        value={req.hint || ''}
+                                        onChange={(e) => updatePhotoRequest(space.id, req.id, { hint: e.target.value }, item.id)}
+                                        placeholder="Hint (optional)"
+                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
+                                      />
                                     </div>
                                     <div className="flex flex-col gap-1">
                                       <label className="flex items-center gap-1 text-xs">
@@ -686,18 +626,12 @@ export default function WalkthroughConfigPage() {
                                         Multiple
                                       </label>
                                     </div>
-                                    <button
-                                      onClick={() => removePhotoRequest(space.id, req.id, item.id)}
-                                      className="p-1 hover:bg-red-50 rounded text-red-500"
-                                    >
+                                    <button onClick={() => removePhotoRequest(space.id, req.id, item.id)} className="p-1 hover:bg-red-50 rounded text-red-500">
                                       <X className="w-4 h-4" />
                                     </button>
                                   </div>
                                 ))}
-                                <button
-                                  onClick={() => addPhotoRequest(space.id, item.id)}
-                                  className="text-sm text-primary-600 hover:text-primary-700"
-                                >
+                                <button onClick={() => addPhotoRequest(space.id, item.id)} className="text-sm text-primary-600 hover:text-primary-700">
                                   + Add photo request
                                 </button>
                               </div>
@@ -726,22 +660,13 @@ export default function WalkthroughConfigPage() {
                                 placeholder="Instruction (e.g., Take overall photo of pool)"
                                 className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
                               />
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={req.location || ''}
-                                  onChange={(e) => updatePhotoRequest(space.id, req.id, { location: e.target.value })}
-                                  placeholder="Location"
-                                  className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
-                                />
-                                <input
-                                  type="text"
-                                  value={req.hint || ''}
-                                  onChange={(e) => updatePhotoRequest(space.id, req.id, { hint: e.target.value })}
-                                  placeholder="Hint (optional)"
-                                  className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
-                                />
-                              </div>
+                              <input
+                                type="text"
+                                value={req.hint || ''}
+                                onChange={(e) => updatePhotoRequest(space.id, req.id, { hint: e.target.value })}
+                                placeholder="Hint (optional)"
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
+                              />
                             </div>
                             <div className="flex flex-col gap-1">
                               <label className="flex items-center gap-1 text-xs">
@@ -753,10 +678,7 @@ export default function WalkthroughConfigPage() {
                                 Multiple
                               </label>
                             </div>
-                            <button
-                              onClick={() => removePhotoRequest(space.id, req.id)}
-                              className="p-1 hover:bg-red-50 rounded text-red-500"
-                            >
+                            <button onClick={() => removePhotoRequest(space.id, req.id)} className="p-1 hover:bg-red-50 rounded text-red-500">
                               <X className="w-4 h-4" />
                             </button>
                           </div>
@@ -770,7 +692,7 @@ export default function WalkthroughConfigPage() {
           ))}
         </div>
 
-        {/* Add Space (bottom) */}
+        {/* Empty State */}
         {spaces.length === 0 && (
           <div className="text-center py-12 bg-gray-50 rounded-xl">
             <p className="text-gray-500 mb-4">No spaces configured yet</p>

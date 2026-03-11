@@ -85,6 +85,17 @@ export interface Property {
   
   // Full RentCast response (called once at creation, stored for admin use)
   rentcastData?: Record<string, any>;
+  
+  // Bed counts for linen calculations (derived from walkthrough config)
+  bedCounts?: {
+    king: number;
+    queen: number;
+    full: number;
+    twin: number;
+    twinXL: number;
+    californiaKing: number;
+    total: number;
+  };
 }
 
 // User profile (extends Firebase Auth)
