@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Google Places API key - needs to be enabled in Google Cloud Console
-// Can be the same as Firebase API key if Places API is enabled in the same project
-const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.GOOGLE_PLACES_API_KEY;
+// Google Places API key - dedicated for Places API
+const GOOGLE_API_KEY = process.env.GOOGLE_PLACES_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
