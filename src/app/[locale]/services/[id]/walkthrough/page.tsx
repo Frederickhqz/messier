@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import DashboardLayout from '@/components/dashboard-layout';
@@ -9,32 +9,60 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { Property, CleanService } from '@/types';
 import { WalkthroughSpace, WalkthroughItem, PhotoRequest } from '@/types/walkthrough';
-import { Check, ChevronRight, Camera, CheckCircle, Circle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, ChevronRight, Camera, CheckCircle, Circle, Loader2, ChevronDown, ChevronUp, X, AlertCircle, ArrowLeft } from 'lucide-react';
 
-interface Step {
+type TaskType = 'photo_required' | 'photo_optional' | 'simple';
+
+interface Task {
+  id: string;
   spaceId: string;
   spaceName: string;
+  spaceOrder: number;
   itemId?: string;
   itemName?: string;
-  requestId: string;
-  request: PhotoRequest;
+  instruction: string;
+  location?: string;
+  hint?: string;
+  type: TaskType;
+  allowMultiple: boolean;
 }
+
+type SpaceProgress = {
+  spaceId: string;
+  total: number;
+  completed: number;
+  required: number;
+  requiredCompleted: number;
+};
+
+type TaskCompletion = {
+  taskId: string;
+  photoUrl?: string;
+  markedDone: boolean;
+  timestamp: Date;
+};
 
 export default function WalkthroughCompletionPage() {
   const params = useParams();
   const router = useRouter();
   const locale = params.locale as string || 'en';
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   
   const [property, setProperty] = useState<Property | null>(null);
   const [service, setService] = useState<CleanService | null>(null);
   const [spaces, setSpaces] = useState<WalkthroughSpace[]>([]);
-  const [steps, setSteps] = useState<Step[]>([]);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [completedSteps, setCompletedSteps] = useState<Record<string, string[]>>({});
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [spaceProgress, setSpaceProgress] = useState<Record<string, SpaceProgress>>({});
+  const [completions, setCompletions] = useState<Record<string, TaskCompletion>>({});
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set());
+  
+  // View state
+  const [currentView, setCurrentView] = useState<'spaces' | 'space_tasks' | 'task' | 'review'>('spaces');
+  const [currentSpaceId, setCurrentSpaceId] = useState<string | null>(null);
+  const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const propertyId = params.propertyId as string;
   const serviceId = params.serviceId as string;
@@ -46,7 +74,6 @@ export default function WalkthroughCompletionPage() {
 
   const loadData = async () => {
     try {
-      // Load property
       const propertyDoc = await getDoc(doc(db, 'properties', propertyId));
       if (!propertyDoc.exists()) {
         router.push(`/${locale}/services`);
@@ -54,7 +81,6 @@ export default function WalkthroughCompletionPage() {
       }
       setProperty({ id: propertyDoc.id, ...propertyDoc.data() } as Property);
 
-      // Load service
       const serviceDoc = await getDoc(doc(db, 'cleanServices', serviceId));
       if (!serviceDoc.exists()) {
         router.push(`/${locale}/services`);
@@ -62,7 +88,6 @@ export default function WalkthroughCompletionPage() {
       }
       setService({ id: serviceDoc.id, ...serviceDoc.data() } as CleanService);
 
-      // Load walkthrough config
       const configSnapshot = await getDocs(
         collection(db, 'properties', propertyId, 'walkthroughConfig')
       );
@@ -75,36 +100,64 @@ export default function WalkthroughCompletionPage() {
         spacesData.sort((a, b) => a.order - b.order);
         setSpaces(spacesData);
         
-        // Flatten to steps
-        const allSteps: Step[] = [];
-        spacesData.forEach(space => {
-          // Add steps for each item
+        // Flatten to tasks
+        const allTasks: Task[] = [];
+        const progress: Record<string, SpaceProgress> = {};
+        
+        spacesData.forEach((space, spaceIndex) => {
+          const spaceTasks: Task[] = [];
+          
+          // Add tasks for each item
           space.items?.forEach(item => {
             item.photoRequests?.forEach(req => {
-              allSteps.push({
+              const taskType: TaskType = req.required ? 'photo_required' : 'photo_optional';
+              const task: Task = {
+                id: `${space.id}_${item.id}_${req.id}`,
                 spaceId: space.id,
                 spaceName: space.name,
+                spaceOrder: spaceIndex,
                 itemId: item.id,
                 itemName: item.name,
-                requestId: req.id,
-                request: req
-              });
+                instruction: req.instruction,
+                location: req.location,
+                hint: req.hint,
+                type: req.multiplePhotos ? taskType : taskType,
+                allowMultiple: req.multiplePhotos || false
+              };
+              spaceTasks.push(task);
+              allTasks.push(task);
             });
           });
           
-          // Add space-level steps
+          // Add space-level tasks
           space.photoRequests?.forEach(req => {
-            allSteps.push({
+            const taskType: TaskType = req.required ? 'photo_required' : 'photo_optional';
+            const task: Task = {
+              id: `${space.id}_${req.id}`,
               spaceId: space.id,
               spaceName: space.name,
-              requestId: req.id,
-              request: req
-            });
+              spaceOrder: spaceIndex,
+              instruction: req.instruction,
+              location: req.location,
+              hint: req.hint,
+              type: taskType,
+              allowMultiple: req.multiplePhotos || false
+            };
+            spaceTasks.push(task);
+            allTasks.push(task);
           });
+          
+          progress[space.id] = {
+            spaceId: space.id,
+            total: spaceTasks.length,
+            completed: 0,
+            required: spaceTasks.filter(t => t.type === 'photo_required').length,
+            requiredCompleted: 0
+          };
         });
         
-        setSteps(allSteps);
-        setExpandedSpaces(new Set(spacesData.map(s => s.id)));
+        setTasks(allTasks);
+        setSpaceProgress(progress);
       }
     } catch (error) {
       console.error('Error loading walkthrough:', error);
@@ -113,29 +166,54 @@ export default function WalkthroughCompletionPage() {
     }
   };
 
-  const handlePhotoUpload = async (step: Step, files: FileList) => {
-    if (!user || !files[0]) return;
+  // Get tasks for current space
+  const getCurrentSpaceTasks = (): Task[] => {
+    if (!currentSpaceId) return [];
+    return tasks.filter(t => t.spaceId === currentSpaceId).sort((a, b) => {
+      // Sort by item first, then by order in photo requests
+      if (a.itemId && b.itemId && a.itemId !== b.itemId) return 0;
+      return 0;
+    });
+  };
+
+  // Get current task
+  const getCurrentTask = (): Task | null => {
+    const spaceTasks = getCurrentSpaceTasks();
+    return spaceTasks[currentTaskIndex] || null;
+  };
+
+  // Handle photo upload
+  const handlePhotoUpload = async (file: File) => {
+    if (!currentSpaceId) return;
+    
+    const task = getCurrentTask();
+    if (!task) return;
     
     setUploading(true);
     try {
-      const file = files[0];
       const timestamp = Date.now();
       const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-      const storageRef = ref(storage, `services/${serviceId}/${step.spaceId}/${fileName}`);
+      const storageRef = ref(storage, `services/${serviceId}/${currentSpaceId}/${fileName}`);
       
       const snapshot = await uploadBytes(storageRef, file);
       const downloadUrl = await getDownloadURL(snapshot.ref);
       
-      // Mark step as completed
-      setCompletedSteps(prev => ({
+      // Mark task complete with photo
+      setCompletions(prev => ({
         ...prev,
-        [step.requestId]: [downloadUrl]
+        [task.id]: {
+          taskId: task.id,
+          photoUrl: downloadUrl,
+          markedDone: false,
+          timestamp: new Date()
+        }
       }));
       
-      // Auto-advance to next step
-      if (currentStep < steps.length - 1) {
-        setTimeout(() => setCurrentStep(currentStep + 1), 300);
-      }
+      // Update space progress
+      updateSpaceProgress(task.spaceId);
+      
+      // Auto-advance to next task
+      advanceToNextTask();
     } catch (error) {
       console.error('Upload error:', error);
       alert('Failed to upload photo. Please try again.');
@@ -144,67 +222,103 @@ export default function WalkthroughCompletionPage() {
     }
   };
 
-  const handleMarkComplete = (step: Step) => {
-    setCompletedSteps(prev => ({
+  // Mark task done (for photo_optional or simple tasks)
+  const markTaskDone = () => {
+    const task = getCurrentTask();
+    if (!task) return;
+    
+    setCompletions(prev => ({
       ...prev,
-      [step.requestId]: ['completed']
+      [task.id]: {
+        taskId: task.id,
+        markedDone: true,
+        timestamp: new Date()
+      }
     }));
     
-    // Auto-advance to next step
-    if (currentStep < steps.length - 1) {
-      setTimeout(() => setCurrentStep(currentStep + 1), 300);
+    updateSpaceProgress(task.spaceId);
+    advanceToNextTask();
+  };
+
+  // Update space progress
+  const updateSpaceProgress = (spaceId: string) => {
+    setTimeout(() => {
+      const spaceTasks = tasks.filter(t => t.spaceId === spaceId);
+      const completed = spaceTasks.filter(t => completions[t.id]).length;
+      const requiredCompleted = spaceTasks.filter(t => t.type === 'photo_required' && completions[t.id]).length;
+      
+      setSpaceProgress(prev => ({
+        ...prev,
+        [spaceId]: {
+          ...prev[spaceId],
+          completed,
+          requiredCompleted
+        }
+      }));
+    }, 100);
+  };
+
+  // Advance to next task
+  const advanceToNextTask = () => {
+    const spaceTasks = getCurrentSpaceTasks();
+    if (currentTaskIndex < spaceTasks.length - 1) {
+      setCurrentTaskIndex(currentTaskIndex + 1);
+    } else {
+      // End of space tasks - go to review
+      setCurrentView('review');
     }
   };
 
-  const handleSkipStep = () => {
-    if (currentStep < steps.length - 1) {
-      setCurrentStep(currentStep + 1);
-    }
+  // Open a space
+  const openSpace = (spaceId: string) => {
+    const spaceTasks = tasks.filter(t => t.spaceId === spaceId);
+    const firstIncomplete = spaceTasks.findIndex(t => !completions[t.id]);
+    
+    setCurrentSpaceId(spaceId);
+    setCurrentTaskIndex(firstIncomplete >= 0 ? firstIncomplete : 0);
+    setCurrentView('space_tasks');
   };
 
-  const handlePreviousStep = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
-    }
+  // Start task from task list
+  const startTask = (taskIndex: number) => {
+    setCurrentTaskIndex(taskIndex);
+    setCurrentView('task');
   };
 
-  const completedCount = Object.keys(completedSteps).filter(id => completedSteps[id]?.length > 0).length;
-  const progress = steps.length > 0 ? (completedCount / steps.length) * 100 : 0;
-  const requiredSteps = steps.filter(s => s.request.required);
-  const requiredCompleted = requiredSteps.filter(s => completedSteps[s.requestId]?.length > 0).length;
-  const canComplete = requiredSteps.every(s => completedSteps[s.requestId]?.length > 0);
+  // Check if space is complete
+  const isSpaceComplete = (spaceId: string): boolean => {
+    const progress = spaceProgress[spaceId];
+    return progress && progress.requiredCompleted === progress.required;
+  };
 
-  const handleSubmitWalkthrough = async () => {
-    if (!canComplete) {
-      alert('Please complete all required steps');
+  // Check if all spaces complete
+  const areAllSpacesComplete = (): boolean => {
+    return Object.values(spaceProgress).every(p => p.requiredCompleted === p.required);
+  };
+
+  // Close service
+  const closeService = async () => {
+    if (!areAllSpacesComplete()) {
+      alert('Please complete all required tasks before closing the service.');
       return;
     }
     
     try {
-      // Save completion data
-      await setDoc(doc(db, 'walkthroughCompletions', `${serviceId}_${propertyId}`), {
-        serviceId,
-        propertyId,
-        completedBy: user?.uid,
-        completedAt: serverTimestamp(),
-        steps: Object.entries(completedSteps).map(([requestId, urls]) => ({
-          requestId,
-          photoUrls: urls.filter(u => u !== 'completed'),
-          markedComplete: urls.includes('completed')
-        }))
-      });
-      
-      // Update service status
       await setDoc(doc(db, 'cleanServices', serviceId), {
-        walkthroughProgress: steps.length,
-        walkthroughTotal: steps.length,
-        walkthroughCompletedAt: serverTimestamp()
+        status: 'completed',
+        completedAt: serverTimestamp(),
+        walkthroughCompletions: Object.entries(completions).map(([taskId, comp]) => ({
+          taskId,
+          photoUrl: comp.photoUrl,
+          markedDone: comp.markedDone,
+          timestamp: comp.timestamp
+        }))
       }, { merge: true });
       
       router.push(`/${locale}/services/${serviceId}`);
     } catch (error) {
-      console.error('Error saving walkthrough:', error);
-      alert('Failed to save walkthrough. Please try again.');
+      console.error('Error closing service:', error);
+      alert('Failed to close service. Please try again.');
     }
   };
 
@@ -218,18 +332,335 @@ export default function WalkthroughCompletionPage() {
     );
   }
 
-  if (steps.length === 0) {
+  // ========== SPACES VIEW ==========
+  if (currentView === 'spaces') {
+    const totalProgress = Object.values(spaceProgress).reduce((acc, p) => ({
+      total: acc.total + p.total,
+      completed: acc.completed + p.completed,
+      required: acc.required + p.required,
+      requiredCompleted: acc.requiredCompleted + p.requiredCompleted
+    }), { total: 0, completed: 0, required: 0, requiredCompleted: 0 });
+
     return (
       <DashboardLayout>
-        <div className="max-w-2xl mx-auto p-4">
-          <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-            <h2 className="text-xl font-semibold mb-2">No Walkthrough Configured</h2>
-            <p className="text-gray-500 mb-4">This property doesn't have a walkthrough set up yet.</p>
+        <div className="max-w-2xl mx-auto space-y-4">
+          {/* Header */}
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <h1 className="text-xl font-bold">{property?.name}</h1>
+            <p className="text-sm text-gray-500">Service Walkthrough</p>
+            
+            <div className="mt-4">
+              <div className="flex justify-between text-sm mb-1">
+                <span>Overall Progress</span>
+                <span>{totalProgress.requiredCompleted}/{totalProgress.required} required</span>
+              </div>
+              <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-primary-600 transition-all"
+                  style={{ width: `${totalProgress.required > 0 ? (totalProgress.requiredCompleted / totalProgress.required) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Spaces List */}
+          <div className="space-y-2">
+            {spaces.map((space, index) => {
+              const progress = spaceProgress[space.id];
+              const isComplete = isSpaceComplete(space.id);
+              
+              return (
+                <button
+                  key={space.id}
+                  onClick={() => openSpace(space.id)}
+                  className="w-full bg-white rounded-xl shadow-sm p-4 flex items-center gap-4 text-left"
+                >
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isComplete ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                    {isComplete ? <CheckCircle className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium">{space.name}</div>
+                    <div className="text-sm text-gray-500">
+                      {progress?.completed || 0}/{progress?.total || 0} tasks
+                      {progress && progress.requiredCompleted < progress.required && (
+                        <span className="text-red-500 ml-2">
+                          ({progress.required - progress.requiredCompleted} required remaining)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400" />
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Close Service Button */}
+          {areAllSpacesComplete() && (
             <button
-              onClick={() => router.push(`/${locale}/services/${serviceId}`)}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg"
+              onClick={closeService}
+              className="w-full py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700"
             >
-              Back to Service
+              Complete Service
+            </button>
+          )}
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ========== SPACE TASKS VIEW ==========
+  if (currentView === 'space_tasks') {
+    const spaceTasks = getCurrentSpaceTasks();
+    const space = spaces.find(s => s.id === currentSpaceId);
+    const progress = spaceProgress[currentSpaceId || ''];
+
+    return (
+      <DashboardLayout>
+        <div className="max-w-2xl mx-auto space-y-4">
+          {/* Header */}
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <button
+              onClick={() => setCurrentView('spaces')}
+              className="flex items-center gap-2 text-gray-600 mb-2"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              Back to Spaces
+            </button>
+            <h1 className="text-xl font-bold">{space?.name}</h1>
+            <div className="mt-2 flex items-center gap-4 text-sm">
+              <span>{progress?.completed}/{progress?.total} completed</span>
+              {progress && progress.requiredCompleted < progress.required && (
+                <span className="text-red-500">
+                  {progress.required - progress.requiredCompleted} required remaining
+                </span>
+              )}
+            </div>
+            
+            <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-primary-600 transition-all"
+                style={{ width: `${progress && progress.total > 0 ? (progress.completed / progress.total) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Task List */}
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            {spaceTasks.map((task, index) => {
+              const completion = completions[task.id];
+              const isComplete = !!completion;
+              
+              return (
+                <button
+                  key={task.id}
+                  onClick={() => startTask(index)}
+                  className="w-full p-4 flex items-center gap-4 text-left border-b last:border-b-0 hover:bg-gray-50"
+                >
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    isComplete ? 'bg-green-100 text-green-600' :
+                    task.type === 'photo_required' ? 'bg-red-100 text-red-500' : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    {isComplete ? <Check className="w-5 h-5" /> : <span>{index + 1}</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {task.itemName && (
+                      <div className="text-xs text-gray-500">{task.itemName}</div>
+                    )}
+                    <div className="font-medium truncate">{task.instruction}</div>
+                    {task.location && (
+                      <div className="text-sm text-gray-500">{task.location}</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {task.type === 'photo_required' && !isComplete && (
+                      <span className="text-xs px-2 py-1 bg-red-100 text-red-600 rounded">Required</span>
+                    )}
+                    {task.type === 'photo_optional' && (
+                      <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">Optional</span>
+                    )}
+                    {task.type === 'simple' && (
+                      <span className="text-xs px-2 py-1 bg-blue-100 text-blue-600 rounded">Task</span>
+                    )}
+                    {isComplete && completion.photoUrl && (
+                      <img src={completion.photoUrl} className="w-10 h-10 rounded object-cover" />
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Close Space Button */}
+          <button
+            onClick={() => {
+              if (isSpaceComplete(currentSpaceId || '')) {
+                setCurrentView('spaces');
+              } else {
+                // Show warning with option to continue
+                const incompleteTasks = spaceTasks.filter(t => t.type === 'photo_required' && !completions[t.id]);
+                const proceed = confirm(`This space has ${incompleteTasks.length} incomplete required task(s). Continue anyway?`);
+                if (proceed) {
+                  setCurrentView('spaces');
+                }
+              }
+            }}
+            className={`w-full py-3 rounded-xl font-medium ${
+              isSpaceComplete(currentSpaceId || '')
+                ? 'bg-green-600 text-white hover:bg-green-700'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {isSpaceComplete(currentSpaceId || '') ? 'Space Complete ✓' : 'Close Space'}
+          </button>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ========== TASK VIEW ==========
+  if (currentView === 'task') {
+    const task = getCurrentTask();
+    const spaceTasks = getCurrentSpaceTasks();
+    const completion = task ? completions[task.id] : null;
+    const isComplete = !!completion;
+
+    if (!task) {
+      setCurrentView('space_tasks');
+      return null;
+    }
+
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen bg-gray-50">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => e.target.files?.[0] && handlePhotoUpload(e.target.files[0])}
+            className="hidden"
+          />
+
+          {/* Header */}
+          <div className="bg-white shadow-sm p-4 flex items-center justify-between">
+            <button onClick={() => setCurrentView('space_tasks')} className="text-gray-600">
+              <X className="w-6 h-6" />
+            </button>
+            <div className="text-sm text-gray-500">
+              {currentTaskIndex + 1} of {spaceTasks.length}
+            </div>
+            <div className="w-6" />
+          </div>
+
+          {/* Task Content */}
+          <div className="p-4 space-y-6">
+            {/* Space & Item Info */}
+            <div className="text-sm text-gray-500">
+              {task.spaceName}
+              {task.itemName && ` → ${task.itemName}`}
+            </div>
+
+            {/* Instruction */}
+            <div className="bg-white rounded-xl p-6 shadow-sm">
+              <h2 className="text-xl font-semibold mb-2">{task.instruction}</h2>
+              {task.location && (
+                <p className="text-gray-600"><span className="font-medium">Location:</span> {task.location}</p>
+              )}
+              {task.hint && (
+                <p className="text-sm text-gray-500 mt-2">💡 {task.hint}</p>
+              )}
+            </div>
+
+            {/* Task Type Badge */}
+            <div className="text-center">
+              {task.type === 'photo_required' && (
+                <span className="px-3 py-1 bg-red-100 text-red-600 rounded-full text-sm">Photo Required</span>
+              )}
+              {task.type === 'photo_optional' && (
+                <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm">Photo Optional</span>
+              )}
+              {task.type === 'simple' && (
+                <span className="px-3 py-1 bg-blue-100 text-blue-600 rounded-full text-sm">Task</span>
+              )}
+            </div>
+
+            {/* Completion Status */}
+            {isComplete && (
+              <div className="bg-green-50 rounded-xl p-4 flex items-center gap-3">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+                <div>
+                  <div className="font-medium text-green-800">Completed</div>
+                  {completion.photoUrl && (
+                    <img src={completion.photoUrl} className="mt-2 rounded-lg max-h-32" />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              {/* Photo Upload */}
+              {(task.type === 'photo_required' || task.type === 'photo_optional') && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="w-full py-4 bg-primary-600 text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {uploading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Camera className="w-5 h-5" />
+                  )}
+                  {uploading ? 'Uploading...' : isComplete ? 'Retake Photo' : 'Take Photo'}
+                </button>
+              )}
+
+              {/* Mark Done (for optional/simple tasks) */}
+              {(task.type === 'photo_optional' || task.type === 'simple') && !isComplete && (
+                <button
+                  onClick={markTaskDone}
+                  className="w-full py-4 bg-gray-200 text-gray-700 rounded-xl font-medium"
+                >
+                  {task.type === 'simple' ? 'Mark Done' : 'Done (No Photo)'}
+                </button>
+              )}
+            </div>
+
+            {/* Progress Dots */}
+            <div className="flex justify-center gap-2">
+              {spaceTasks.map((t, i) => (
+                <div
+                  key={t.id}
+                  className={`w-2 h-2 rounded-full ${
+                    i === currentTaskIndex ? 'bg-primary-600' :
+                    completions[t.id] ? 'bg-green-500' : 'bg-gray-300'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <div className="fixed bottom-0 left-0 right-0 bg-white border-t flex">
+            <button
+              onClick={() => currentTaskIndex > 0 && setCurrentTaskIndex(currentTaskIndex - 1)}
+              disabled={currentTaskIndex === 0}
+              className="flex-1 py-4 text-center text-gray-600 disabled:opacity-50"
+            >
+              ← Previous
+            </button>
+            <button
+              onClick={() => {
+                if (currentTaskIndex < spaceTasks.length - 1) {
+                  setCurrentTaskIndex(currentTaskIndex + 1);
+                } else {
+                  setCurrentView('review');
+                }
+              }}
+              className="flex-1 py-4 text-center text-primary-600 border-l"
+            >
+              {currentTaskIndex < spaceTasks.length - 1 ? 'Next →' : 'Review →'}
             </button>
           </div>
         </div>
@@ -237,244 +668,109 @@ export default function WalkthroughCompletionPage() {
     );
   }
 
-  const currentStepData = steps[currentStep];
+  // ========== REVIEW VIEW ==========
+  if (currentView === 'review') {
+    const spaceTasks = getCurrentSpaceTasks();
+    const space = spaces.find(s => s.id === currentSpaceId);
+    const incompleteTasks = spaceTasks.filter(t => !completions[t.id]);
+    const requiredIncomplete = incompleteTasks.filter(t => t.type === 'photo_required');
 
-  return (
-    <DashboardLayout>
-      <div className="max-w-2xl mx-auto space-y-4">
-        {/* Progress Header */}
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h1 className="text-lg font-semibold">{property?.name}</h1>
-              <p className="text-sm text-gray-500">
-                {completedCount} of {steps.length} steps completed
-              </p>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-primary-600">
-                {Math.round(progress)}%
-              </div>
-              <div className="text-xs text-gray-500">
-                {requiredCompleted}/{requiredSteps.length} required
-              </div>
-            </div>
+    return (
+      <DashboardLayout>
+        <div className="max-w-2xl mx-auto space-y-4">
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <h1 className="text-xl font-bold mb-2">Review: {space?.name}</h1>
+            <p className="text-gray-500">
+              {spaceTasks.filter(t => completions[t.id]).length} of {spaceTasks.length} tasks completed
+            </p>
           </div>
-          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-primary-600 transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
 
-        {/* Space Overview */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="p-4 border-b">
-            <h2 className="font-medium">Spaces</h2>
-          </div>
-          <div className="divide-y">
-            {spaces.map(space => {
-              const spaceSteps = steps.filter(s => s.spaceId === space.id);
-              const spaceCompleted = spaceSteps.filter(s => completedSteps[s.requestId]?.length > 0).length;
-              const isExpanded = expandedSpaces.has(space.id);
-              
+          {/* Completed Tasks */}
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div className="p-3 bg-green-50 text-green-800 font-medium">
+              Completed ({spaceTasks.filter(t => completions[t.id]).length})
+            </div>
+            {spaceTasks.filter(t => completions[t.id]).map(task => {
+              const comp = completions[task.id];
               return (
-                <div key={space.id}>
-                  <button
-                    onClick={() => {
-                      const newExpanded = new Set(expandedSpaces);
-                      if (newExpanded.has(space.id)) newExpanded.delete(space.id);
-                      else newExpanded.add(space.id);
-                      setExpandedSpaces(newExpanded);
-                    }}
-                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50"
-                  >
-                    <div className="flex items-center gap-3">
-                      {spaceCompleted === spaceSteps.length ? (
-                        <CheckCircle className="w-5 h-5 text-green-500" />
-                      ) : (
-                        <Circle className="w-5 h-5 text-gray-300" />
-                      )}
-                      <span className="font-medium">{space.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <span>{spaceCompleted}/{spaceSteps.length}</span>
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </div>
-                  </button>
-                  
-                  {isExpanded && (
-                    <div className="px-4 pb-4 space-y-1">
-                      {spaceSteps.map(step => (
-                        <button
-                          key={step.requestId}
-                          onClick={() => setCurrentStep(steps.findIndex(s => s.requestId === step.requestId))}
-                          className={`w-full flex items-center gap-3 p-2 rounded-lg text-left ${
-                            steps.findIndex(s => s.requestId === step.requestId) === currentStep
-                              ? 'bg-primary-50 border border-primary-200'
-                              : 'hover:bg-gray-50'
-                          }`}
-                        >
-                          {completedSteps[step.requestId]?.length > 0 ? (
-                            <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                          ) : step.request.required ? (
-                            <Circle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                          ) : (
-                            <Circle className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">
-                              {step.itemName ? `${step.itemName}: ` : ''}{step.request.instruction}
-                            </div>
-                            {step.request.required && !completedSteps[step.requestId]?.length && (
-                              <span className="text-xs text-red-500">Required</span>
-                            )}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
+                <div key={task.id} className="p-4 flex items-center gap-3 border-b">
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                  <div className="flex-1">
+                    <div className="font-medium">{task.instruction}</div>
+                    {task.itemName && <div className="text-sm text-gray-500">{task.itemName}</div>}
+                  </div>
+                  {comp.photoUrl && (
+                    <img src={comp.photoUrl} className="w-12 h-12 rounded object-cover" />
                   )}
                 </div>
               );
             })}
           </div>
-        </div>
 
-        {/* Current Step */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="p-6">
-            <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-              <span>{currentStepData.spaceName}</span>
-              {currentStepData.itemName && (
-                <>
-                  <ChevronRight className="w-4 h-4" />
-                  <span>{currentStepData.itemName}</span>
-                </>
-              )}
-            </div>
-            
-            <h2 className="text-xl font-semibold mb-2">
-              {currentStepData.request.instruction}
-            </h2>
-            
-            {currentStepData.request.location && (
-              <p className="text-gray-600 mb-1">
-                <span className="font-medium">Location:</span> {currentStepData.request.location}
-              </p>
-            )}
-            
-            {currentStepData.request.hint && (
-              <p className="text-sm text-gray-500 mb-4">
-                💡 {currentStepData.request.hint}
-              </p>
-            )}
-
-            {currentStepData.request.required && !completedSteps[currentStepData.requestId]?.length && (
-              <div className="mb-4 px-3 py-2 bg-red-50 text-red-700 rounded-lg text-sm">
-                ⚠️ This step is required
+          {/* Incomplete Tasks */}
+          {incompleteTasks.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div className={`p-3 font-medium ${requiredIncomplete.length > 0 ? 'bg-red-50 text-red-800' : 'bg-gray-50 text-gray-800'}`}>
+                Incomplete ({incompleteTasks.length})
+                {requiredIncomplete.length > 0 && ` - ${requiredIncomplete.length} required`}
               </div>
-            )}
-
-            {/* Already completed */}
-            {completedSteps[currentStepData.requestId]?.length > 0 && (
-              <div className="mb-4 px-3 py-2 bg-green-50 text-green-700 rounded-lg text-sm flex items-center gap-2">
-                <Check className="w-4 h-4" />
-                Step completed
-                {completedSteps[currentStepData.requestId][0] !== 'completed' && (
-                  <a 
-                    href={completedSteps[currentStepData.requestId][0]} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="underline"
-                  >
-                    View photo
-                  </a>
-                )}
-              </div>
-            )}
-
-            {/* Upload area */}
-            {currentStepData.request.multiplePhotos || !completedSteps[currentStepData.requestId]?.length ? (
-              <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => e.target.files && handlePhotoUpload(currentStepData, e.target.files)}
-                  className="hidden"
-                  id="photo-upload"
-                  disabled={uploading}
-                />
-                <label
-                  htmlFor="photo-upload"
-                  className={`flex flex-col items-center gap-2 cursor-pointer ${uploading ? 'opacity-50' : ''}`}
+              {incompleteTasks.map(task => (
+                <button
+                  key={task.id}
+                  onClick={() => {
+                    const idx = spaceTasks.findIndex(t => t.id === task.id);
+                    setCurrentTaskIndex(idx);
+                    setCurrentView('task');
+                  }}
+                  className="w-full p-4 flex items-center gap-3 text-left hover:bg-gray-50"
                 >
-                  {uploading ? (
-                    <Loader2 className="w-12 h-12 text-primary-600 animate-spin" />
+                  {task.type === 'photo_required' ? (
+                    <AlertCircle className="w-5 h-5 text-red-500" />
                   ) : (
-                    <Camera className="w-12 h-12 text-gray-400" />
+                    <Circle className="w-5 h-5 text-gray-400" />
                   )}
-                  <span className="text-gray-600">
-                    {uploading ? 'Uploading...' : 'Tap to take photo'}
-                  </span>
-                  {currentStepData.request.multiplePhotos && (
-                    <span className="text-xs text-gray-400">Multiple photos allowed</span>
-                  )}
-                </label>
-              </div>
-            ) : null}
-
-            {/* Action buttons */}
-            <div className="mt-4 flex gap-2">
-              {!currentStepData.request.required && !completedSteps[currentStepData.requestId]?.length && (
-                <button
-                  onClick={() => handleMarkComplete(currentStepData)}
-                  className="flex-1 py-2 px-4 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                >
-                  Mark Complete (No Photo)
+                  <div className="flex-1">
+                    <div className="font-medium">{task.instruction}</div>
+                    {task.itemName && <div className="text-sm text-gray-500">{task.itemName}</div>}
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400" />
                 </button>
-              )}
-              
-              {!currentStepData.request.required && currentStep < steps.length - 1 && (
-                <button
-                  onClick={handleSkipStep}
-                  className="flex-1 py-2 px-4 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                >
-                  Skip
-                </button>
-              )}
+              ))}
             </div>
-          </div>
+          )}
 
-          {/* Navigation */}
-          <div className="flex border-t">
+          {/* Actions */}
+          <div className="space-y-3">
             <button
-              onClick={handlePreviousStep}
-              disabled={currentStep === 0}
-              className="flex-1 py-3 text-center text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => setCurrentView('spaces')}
+              className={`w-full py-3 rounded-xl font-medium ${
+                requiredIncomplete.length === 0
+                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
             >
-              ← Previous
+              {requiredIncomplete.length === 0 ? 'Space Complete ✓' : 'Close Space Anyway'}
             </button>
-            <button
-              onClick={() => currentStep < steps.length - 1 && setCurrentStep(currentStep + 1)}
-              disabled={currentStep === steps.length - 1}
-              className="flex-1 py-3 text-center text-primary-600 hover:bg-primary-50 disabled:opacity-50 border-l"
-            >
-              Next →
-            </button>
+            
+            {requiredIncomplete.length > 0 && (
+              <button
+                onClick={() => {
+                  const firstIncomplete = spaceTasks.findIndex(t => !completions[t.id] && t.type === 'photo_required');
+                  if (firstIncomplete >= 0) {
+                    setCurrentTaskIndex(firstIncomplete);
+                    setCurrentView('task');
+                  }
+                }}
+                className="w-full py-3 bg-primary-600 text-white rounded-xl font-medium"
+              >
+                Complete Required Tasks
+              </button>
+            )}
           </div>
         </div>
+      </DashboardLayout>
+    );
+  }
 
-        {/* Submit Button */}
-        {canComplete && (
-          <button
-            onClick={handleSubmitWalkthrough}
-            className="w-full py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700"
-          >
-            Complete Walkthrough
-          </button>
-        )}
-      </div>
-    </DashboardLayout>
-  );
+  return null;
 }
