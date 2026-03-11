@@ -5,44 +5,56 @@ import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/auth-context';
 import DashboardLayout from '@/components/dashboard-layout';
-import { doc, getDoc, getDocs, collection, query, where, addDoc, deleteDoc, updateDoc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Property, WalkthroughStep, RoomType } from '@/types';
-import { Plus, Trash2, GripVertical, ChevronUp, ChevronDown, Lightbulb } from 'lucide-react';
+import { Property } from '@/types';
+import { WalkthroughSpace, PhotoRequest } from '@/types/walkthrough';
+import { Plus, Trash2, GripVertical, ChevronDown, ChevronUp, Save, Loader2, Languages } from 'lucide-react';
 
-export default function WalkthroughEditorPage() {
+const spaceTypeLabels: Record<string, string> = {
+  bedroom: 'Bedroom',
+  bathroom: 'Bathroom',
+  kitchen: 'Kitchen',
+  livingRoom: 'Living Room',
+  diningRoom: 'Dining Room',
+  office: 'Office',
+  garage: 'Garage',
+  patio: 'Patio',
+  laundry: 'Laundry',
+  other: 'Other'
+};
+
+const supportedLanguages = ['en', 'es', 'pt', 'fr', 'de', 'it'];
+
+const languageLabels: Record<string, string> = {
+  en: 'English',
+  es: 'Spanish',
+  pt: 'Portuguese',
+  fr: 'French',
+  de: 'German',
+  it: 'Italian'
+};
+
+export default function WalkthroughConfigPage() {
   const params = useParams();
-  const locale = params.locale as string || 'en';
-  const propertyId = params.id as string;
   const router = useRouter();
+  const locale = params.locale as string || 'en';
   const t = useTranslations();
   const { user, profile, loading: authLoading } = useAuth();
-
+  
   const [property, setProperty] = useState<Property | null>(null);
-  const [steps, setSteps] = useState<WalkthroughStep[]>([]);
+  const [spaces, setSpaces] = useState<WalkthroughSpace[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  // New step form
-  const [newInstruction, setNewInstruction] = useState('');
-  const [newRoomType, setNewRoomType] = useState<RoomType>('bedroom');
-  const [newHint, setNewHint] = useState('');
-  const [newRequired, setNewRequired] = useState(true);
-
-  // Editing state
-  const [editingStep, setEditingStep] = useState<string | null>(null);
-
-  const isAdmin = profile?.role === 'admin';
+  const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set());
+  const [translating, setTranslating] = useState<string | null>(null);
+  
+  const propertyId = params.id as string;
 
   useEffect(() => {
-    if (!authLoading && (!user || !isAdmin)) {
-      router.push(`/${locale}/dashboard`);
-    }
-  }, [user, profile, authLoading, router, locale]);
-
-  useEffect(() => {
+    if (!user) return;
     loadData();
-  }, [propertyId]);
+  }, [user, propertyId]);
 
   const loadData = async () => {
     try {
@@ -52,118 +64,366 @@ export default function WalkthroughEditorPage() {
         router.push(`/${locale}/properties`);
         return;
       }
-      setProperty({
-        id: propertyDoc.id,
-        ...propertyDoc.data(),
-        createdAt: propertyDoc.data().createdAt?.toDate()
-      } as Property);
-
-      // Load walkthrough steps
-      const stepsQuery = query(
-        collection(db, 'walkthroughSteps'),
-        where('propertyId', '==', propertyId)
+      
+      const propertyData = { id: propertyDoc.id, ...propertyDoc.data() } as Property;
+      setProperty(propertyData);
+      
+      // Load existing walkthrough config
+      const configSnapshot = await getDocs(
+        collection(db, 'properties', propertyId, 'walkthroughConfig')
       );
-      const stepsSnap = await getDocs(stepsQuery);
-      const stepsData = stepsSnap.docs
-        .map(doc => ({
+      
+      if (!configSnapshot.empty) {
+        const spacesData = configSnapshot.docs.map(doc => ({
           id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate()
-        }))
-        .sort((a: any, b: any) => (a.order || 0) - (b.order || 0)) as WalkthroughStep[];
-      setSteps(stepsData);
-
+          ...doc.data()
+        })) as WalkthroughSpace[];
+        spacesData.sort((a, b) => a.order - b.order);
+        setSpaces(spacesData);
+      } else {
+        // Initialize spaces from bedroom config
+        const initialSpaces = generateInitialSpaces(propertyData);
+        setSpaces(initialSpaces);
+      }
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading walkthrough:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const addStep = async () => {
-    if (!newInstruction.trim()) return;
+  const generateInitialSpaces = (property: Property): WalkthroughSpace[] => {
+    const spaces: WalkthroughSpace[] = [];
+    let order = 0;
+    
+    // Add bedrooms from bedroom config
+    if (property.bedroomConfig && property.bedroomConfig.length > 0) {
+      property.bedroomConfig.forEach((room, index) => {
+        spaces.push({
+          id: `bedroom-${index}`,
+          name: room.name || `Bedroom ${index + 1}`,
+          type: 'bedroom',
+          order: order++,
+          photoRequests: generateDefaultPhotoRequests('bedroom', room.bathroomType)
+        });
+        
+        // Add ensuite bathroom if exists
+        if (room.bathroomType === 'full') {
+          spaces.push({
+            id: `bathroom-ensuite-${index}`,
+            name: `${room.name || `Bedroom ${index + 1}`} Bathroom`,
+            type: 'bathroom',
+            order: order++,
+            photoRequests: generateDefaultPhotoRequests('bathroom')
+          });
+        } else if (room.bathroomType === 'half') {
+          spaces.push({
+            id: `bathroom-ensuite-${index}`,
+            name: `${room.name || `Bedroom ${index + 1}`} Half Bath`,
+            type: 'bathroom',
+            order: order++,
+            photoRequests: generateDefaultPhotoRequests('bathroom', 'half')
+          });
+        }
+      });
+    }
+    
+    // Add remaining bathrooms
+    const totalBathrooms = property.bathrooms || 0;
+    const ensuiteBathrooms = property.bedroomConfig?.filter(r => r.bathroomType === 'full').length || 0;
+    const ensuiteHalfBaths = property.bedroomConfig?.filter(r => r.bathroomType === 'half').length || 0;
+    const remainingFullBaths = totalBathrooms - ensuiteBathrooms;
+    const remainingHalfBaths = (property.halfBathrooms || 0) - ensuiteHalfBaths;
+    
+    for (let i = 0; i < remainingFullBaths; i++) {
+      spaces.push({
+        id: `bathroom-${i}`,
+        name: `Bathroom ${i + 1}`,
+        type: 'bathroom',
+        order: order++,
+        photoRequests: generateDefaultPhotoRequests('bathroom')
+      });
+    }
+    
+    for (let i = 0; i < remainingHalfBaths; i++) {
+      spaces.push({
+        id: `halfbath-${i}`,
+        name: `Half Bath ${i + 1}`,
+        type: 'bathroom',
+        order: order++,
+        photoRequests: generateDefaultPhotoRequests('bathroom', 'half')
+      });
+    }
+    
+    // Add common areas
+    spaces.push({
+      id: 'kitchen',
+      name: 'Kitchen',
+      type: 'kitchen',
+      order: order++,
+      photoRequests: generateDefaultPhotoRequests('kitchen')
+    });
+    
+    spaces.push({
+      id: 'livingroom',
+      name: 'Living Room',
+      type: 'livingRoom',
+      order: order++,
+      photoRequests: generateDefaultPhotoRequests('livingRoom')
+    });
+    
+    return spaces;
+  };
 
-    setSaving(true);
+  const generateDefaultPhotoRequests = (type: string, subType?: string): PhotoRequest[] => {
+    const requests: PhotoRequest[] = [];
+    
+    switch (type) {
+      case 'bedroom':
+        requests.push({
+          id: `${type}-bed`,
+          instruction: 'Take photo of bed made',
+          location: 'Center of room',
+          hint: 'Ensure pillows are fluffed and bedspread is straight',
+          required: true,
+          multiplePhotos: false,
+          order: 0
+        });
+        requests.push({
+          id: `${type}-closet`,
+          instruction: 'Take photo of closet interior',
+          location: 'Inside closet',
+          hint: 'Open closet doors fully',
+          required: true,
+          multiplePhotos: false,
+          order: 1
+        });
+        requests.push({
+          id: `${type}-overall`,
+          instruction: 'Take overall photo of room',
+          location: 'Doorway',
+          hint: 'Stand at entrance for best angle',
+          required: true,
+          multiplePhotos: false,
+          order: 2
+        });
+        break;
+        
+      case 'bathroom':
+        const isHalf = subType === 'half';
+        if (!isHalf) {
+          requests.push({
+            id: `${type}-tub`,
+            instruction: 'Take photo of shower/tub area',
+            location: 'Inside shower',
+            hint: 'Ensure shower curtain is closed or glass is clean',
+            required: true,
+            multiplePhotos: false,
+            order: 0
+          });
+        }
+        requests.push({
+          id: `${type}-sink`,
+          instruction: 'Take photo of sink and counter',
+          location: 'In front of sink',
+          hint: 'Clear any personal items from counter',
+          required: true,
+          multiplePhotos: false,
+          order: isHalf ? 0 : 1
+        });
+        requests.push({
+          id: `${type}-toilet`,
+          instruction: 'Take photo of toilet',
+          location: 'Side angle',
+          hint: 'Ensure seat is down and clean',
+          required: true,
+          multiplePhotos: false,
+          order: isHalf ? 1 : 2
+        });
+        requests.push({
+          id: `${type}-overall`,
+          instruction: 'Take overall photo of bathroom',
+          location: 'Doorway',
+          required: true,
+          multiplePhotos: false,
+          order: isHalf ? 2 : 3
+        });
+        break;
+        
+      case 'kitchen':
+        requests.push({
+          id: `${type}-counters`,
+          instruction: 'Take photo of clean countertops',
+          location: 'Center of kitchen',
+          hint: 'Ensure all appliances are in place',
+          required: true,
+          multiplePhotos: false,
+          order: 0
+        });
+        requests.push({
+          id: `${type}-sink`,
+          instruction: 'Take photo of sink area',
+          location: 'In front of sink',
+          hint: 'Sink should be empty and clean',
+          required: true,
+          multiplePhotos: false,
+          order: 1
+        });
+        requests.push({
+          id: `${type}-appliances`,
+          instruction: 'Take photo of appliances (stove, refrigerator)',
+          location: 'Side angle',
+          required: true,
+          multiplePhotos: true,
+          order: 2
+        });
+        break;
+        
+      case 'livingRoom':
+        requests.push({
+          id: `${type}-sofa`,
+          instruction: 'Take photo of sofa/seating area',
+          location: 'Center of room',
+          hint: 'Fluff pillows and straighten cushions',
+          required: true,
+          multiplePhotos: false,
+          order: 0
+        });
+        requests.push({
+          id: `${type}-overall`,
+          instruction: 'Take overall photo of living room',
+          location: 'Doorway or corner',
+          required: true,
+          multiplePhotos: false,
+          order: 1
+        });
+        break;
+    }
+    
+    return requests;
+  };
+
+  const toggleSpace = (spaceId: string) => {
+    const newExpanded = new Set(expandedSpaces);
+    if (newExpanded.has(spaceId)) {
+      newExpanded.delete(spaceId);
+    } else {
+      newExpanded.add(spaceId);
+    }
+    setExpandedSpaces(newExpanded);
+  };
+
+  const addSpace = () => {
+    const newSpace: WalkthroughSpace = {
+      id: `space-${Date.now()}`,
+      name: `New Space ${spaces.length + 1}`,
+      type: 'other',
+      order: spaces.length,
+      photoRequests: []
+    };
+    setSpaces([...spaces, newSpace]);
+    const newExpanded = new Set(expandedSpaces);
+    newExpanded.add(newSpace.id);
+    setExpandedSpaces(newExpanded);
+  };
+
+  const removeSpace = (spaceId: string) => {
+    setSpaces(spaces.filter(s => s.id !== spaceId));
+  };
+
+  const updateSpace = (spaceId: string, updates: Partial<WalkthroughSpace>) => {
+    setSpaces(spaces.map(s => s.id === spaceId ? { ...s, ...updates } : s));
+  };
+
+  const addPhotoRequest = (spaceId: string) => {
+    const space = spaces.find(s => s.id === spaceId);
+    if (!space) return;
+    
+    const newRequest: PhotoRequest = {
+      id: `photo-${Date.now()}`,
+      instruction: '',
+      location: '',
+      hint: '',
+      required: true,
+      multiplePhotos: false,
+      order: space.photoRequests.length
+    };
+    
+    updateSpace(spaceId, {
+      photoRequests: [...space.photoRequests, newRequest]
+    });
+  };
+
+  const removePhotoRequest = (spaceId: string, requestId: string) => {
+    const space = spaces.find(s => s.id === spaceId);
+    if (!space) return;
+    
+    updateSpace(spaceId, {
+      photoRequests: space.photoRequests.filter(r => r.id !== requestId)
+    });
+  };
+
+  const updatePhotoRequest = (spaceId: string, requestId: string, updates: Partial<PhotoRequest>) => {
+    const space = spaces.find(s => s.id === spaceId);
+    if (!space) return;
+    
+    updateSpace(spaceId, {
+      photoRequests: space.photoRequests.map(r => 
+        r.id === requestId ? { ...r, ...updates } : r
+      )
+    });
+  };
+
+  const translateInstruction = async (spaceId: string, requestId: string, text: string, field: 'instruction' | 'hint') => {
+    if (!text) return;
+    
+    setTranslating(`${spaceId}-${requestId}-${field}`);
+    
     try {
-      const stepData = {
-        propertyId,
-        order: steps.length,
-        instruction: newInstruction.trim(),
-        roomType: newRoomType,
-        hint: newHint.trim() || null,
-        required: newRequired,
-        createdAt: serverTimestamp()
-      };
-
-      const docRef = await addDoc(collection(db, 'walkthroughSteps'), stepData);
+      // Translate using a translation API or service
+      // For now, we'll store the original text
+      // In production, you'd call a translation API here
       
-      setSteps([...steps, {
-        id: docRef.id,
-        ...stepData,
-        createdAt: new Date()
-      } as WalkthroughStep]);
-
-      // Reset form
-      setNewInstruction('');
-      setNewHint('');
-      setNewRequired(true);
-
+      const translations: Record<string, string> = {
+        en: text
+      };
+      
+      // Simple translation simulation - in production use Google Translate API
+      for (const lang of supportedLanguages.filter(l => l !== 'en')) {
+        // Store empty for now - will be filled by translation API
+        translations[lang] = '';
+      }
+      
+      updatePhotoRequest(spaceId, requestId, {
+        [field]: text,
+        [`${field}Translations`]: translations
+      });
     } catch (error) {
-      console.error('Error adding step:', error);
-      alert('Failed to add step');
+      console.error('Translation error:', error);
+    } finally {
+      setTranslating(null);
+    }
+  };
+
+  const saveWalkthrough = async () => {
+    setSaving(true);
+    
+    try {
+      // Save each space as a separate document
+      for (const space of spaces) {
+        await setDoc(
+          doc(db, 'properties', propertyId, 'walkthroughConfig', space.id),
+          space
+        );
+      }
+      
+      router.push(`/${locale}/properties/${propertyId}`);
+    } catch (error) {
+      console.error('Error saving walkthrough:', error);
+      alert('Failed to save walkthrough configuration');
     } finally {
       setSaving(false);
     }
-  };
-
-  const updateStep = async (stepId: string, updates: Partial<WalkthroughStep>) => {
-    try {
-      await updateDoc(doc(db, 'walkthroughSteps', stepId), updates);
-      setSteps(steps.map(s => s.id === stepId ? { ...s, ...updates } : s));
-    } catch (error) {
-      console.error('Error updating step:', error);
-    }
-  };
-
-  const deleteStep = async (stepId: string) => {
-    if (!confirm('Are you sure you want to delete this step?')) return;
-
-    try {
-      await deleteDoc(doc(db, 'walkthroughSteps', stepId));
-      setSteps(steps.filter(s => s.id !== stepId));
-    } catch (error) {
-      console.error('Error deleting step:', error);
-    }
-  };
-
-  const moveStep = async (index: number, direction: 'up' | 'down') => {
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= steps.length) return;
-
-    const newSteps = [...steps];
-    [newSteps[index], newSteps[newIndex]] = [newSteps[newIndex], newSteps[index]];
-    
-    // Update order in Firestore
-    const batch = [];
-    for (let i = 0; i < newSteps.length; i++) {
-      batch.push(updateDoc(doc(db, 'walkthroughSteps', newSteps[i].id), { order: i }));
-    }
-    await Promise.all(batch);
-    
-    setSteps(newSteps);
-  };
-
-  const roomTypeLabels: Record<RoomType, string> = {
-    bedroom: t('property.rooms.bedroom'),
-    bathroom: t('property.rooms.bathroom'),
-    kitchen: t('property.rooms.kitchen'),
-    livingRoom: t('property.rooms.livingRoom'),
-    diningRoom: t('property.rooms.diningRoom'),
-    office: t('property.rooms.office'),
-    garage: t('property.rooms.garage'),
-    patio: t('property.rooms.patio'),
-    laundry: t('property.rooms.laundry'),
-    other: t('property.rooms.other')
   };
 
   if (authLoading || loading) {
@@ -176,189 +436,230 @@ export default function WalkthroughEditorPage() {
     );
   }
 
+  if (!property) return null;
+
   return (
     <DashboardLayout>
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Photo Walkthrough Editor</h1>
-            <p className="text-gray-500">{property?.name}</p>
+            <h1 className="text-2xl font-bold text-gray-900">Configure Walkthrough</h1>
+            <p className="text-gray-500">{property.name}</p>
           </div>
           <button
-            onClick={() => router.push(`/${locale}/properties`)}
-            className="px-4 py-2 text-gray-600 hover:text-gray-900 transition"
+            onClick={saveWalkthrough}
+            disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
           >
-            Done
+            {saving ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-5 h-5" />
+                Save Configuration
+              </>
+            )}
           </button>
         </div>
 
-        {/* Instructions */}
-        <div className="bg-blue-50 rounded-xl p-4">
-          <h3 className="font-medium text-blue-900 mb-2">How it works</h3>
-          <ul className="text-sm text-blue-700 space-y-1">
-            <li>• Create step-by-step photo instructions for housekeepers</li>
-            <li>• Each step shows an instruction before taking the photo</li>
-            <li>• Housekeepers see a preview before submitting</li>
-            <li>• Required steps must be completed, optional steps can be skipped</li>
-          </ul>
-        </div>
-
-        {/* Add new step form */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Add New Step</h2>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Room Type
-              </label>
-              <select
-                value={newRoomType}
-                onChange={(e) => setNewRoomType(e.target.value as RoomType)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              >
-                {Object.entries(roomTypeLabels).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Instruction *
-              </label>
-              <input
-                type="text"
-                value={newInstruction}
-                onChange={(e) => setNewInstruction(e.target.value)}
-                placeholder="e.g., Take a photo of the master bedroom showing the bed is made"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Hint (optional)
-              </label>
-              <input
-                type="text"
-                value={newHint}
-                onChange={(e) => setNewHint(e.target.value)}
-                placeholder="e.g., Make sure the pillows are visible"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="required"
-                checked={newRequired}
-                onChange={(e) => setNewRequired(e.target.checked)}
-                className="w-4 h-4 text-primary-600 rounded"
-              />
-              <label htmlFor="required" className="text-sm text-gray-700">
-                Required step (housekeepers must complete)
-              </label>
-            </div>
-
-            <button
-              onClick={addStep}
-              disabled={!newInstruction.trim() || saving}
-              className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
-            >
-              <Plus className="w-5 h-5" />
-              {saving ? 'Adding...' : 'Add Step'}
-            </button>
-          </div>
-        </div>
-
-        {/* Steps list */}
-        {steps.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm p-8 text-center text-gray-500">
-            No walkthrough steps yet. Add your first step above.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {steps.map((step, index) => (
+        {/* Spaces */}
+        <div className="space-y-4">
+          {spaces.map((space, index) => (
+            <div key={space.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+              {/* Space Header */}
               <div
-                key={step.id}
-                className="bg-white rounded-xl shadow-sm p-4"
+                className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50"
+                onClick={() => toggleSpace(space.id)}
               >
-                <div className="flex items-start gap-4">
-                  {/* Drag handle and order */}
-                  <div className="flex flex-col items-center gap-1">
-                    <button
-                      onClick={() => moveStep(index, 'up')}
-                      disabled={index === 0}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                    >
-                      <ChevronUp className="w-4 h-4" />
-                    </button>
-                    <span className="text-sm font-medium text-gray-500">{index + 1}</span>
-                    <button
-                      onClick={() => moveStep(index, 'down')}
-                      disabled={index === steps.length - 1}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                    >
-                      <ChevronDown className="w-4 h-4" />
-                    </button>
+                <GripVertical className="w-5 h-5 text-gray-400 cursor-move" />
+                <div className="flex-1">
+                  <div className="font-medium">{space.name}</div>
+                  <div className="text-sm text-gray-500">
+                    {spaceTypeLabels[space.type]} • {space.photoRequests.length} photo requests
                   </div>
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); removeSpace(space.id); }}
+                  className="p-2 hover:bg-red-50 rounded text-red-600"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                {expandedSpaces.has(space.id) ? (
+                  <ChevronUp className="w-5 h-5 text-gray-400" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-gray-400" />
+                )}
+              </div>
 
-                  {/* Content */}
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="inline-block px-2 py-1 text-xs font-medium bg-primary-100 text-primary-700 rounded-full mb-2">
-                          {roomTypeLabels[step.roomType]}
-                        </span>
-                        <h3 className="font-medium text-gray-900">{step.instruction}</h3>
-                        {step.hint && (
-                          <div className="flex items-start gap-2 mt-2 text-sm text-gray-500">
-                            <Lightbulb className="w-4 h-4 flex-shrink-0" />
-                            {step.hint}
-                          </div>
-                        )}
-                        <span className={`inline-block mt-2 text-xs font-medium ${
-                          step.required ? 'text-red-600' : 'text-gray-400'
-                        }`}>
-                          {step.required ? 'Required' : 'Optional'}
-                        </span>
-                      </div>
+              {/* Space Details */}
+              {expandedSpaces.has(space.id) && (
+                <div className="border-t p-4 space-y-4">
+                  {/* Space Name & Type */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Space Name</label>
+                      <input
+                        type="text"
+                        value={space.name}
+                        onChange={(e) => updateSpace(space.id, { name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        placeholder="e.g., Master Bedroom"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                      <select
+                        value={space.type}
+                        onChange={(e) => updateSpace(space.id, { type: e.target.value as any })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      >
+                        {Object.entries(spaceTypeLabels).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <button
-                    onClick={() => deleteStep(step.id)}
-                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                  {/* Photo Requests */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700">Photo Requests</label>
+                      <button
+                        onClick={() => addPhotoRequest(space.id)}
+                        className="text-sm text-primary-600 hover:text-primary-700"
+                      >
+                        + Add Photo Request
+                      </button>
+                    </div>
 
-        {/* Preview */}
-        <div className="bg-gray-50 rounded-xl p-6">
-          <h3 className="font-medium text-gray-900 mb-3">Preview</h3>
-          <p className="text-sm text-gray-500 mb-4">
-            Housekeepers will see steps in this order with your instructions.
-          </p>
-          <div className="space-y-2">
-            {steps.map((step, index) => (
-              <div key={step.id} className="flex items-center gap-3 text-sm">
-                <span className="w-6 h-6 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-medium">
-                  {index + 1}
-                </span>
-                <span className="text-gray-700">{step.instruction}</span>
-              </div>
-            ))}
-          </div>
+                    {space.photoRequests.length === 0 ? (
+                      <p className="text-sm text-gray-500 py-4 text-center bg-gray-50 rounded-lg">
+                        No photo requests. Click "Add Photo Request" to start.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {space.photoRequests.map((request, reqIndex) => (
+                          <div key={request.id} className="p-4 bg-gray-50 rounded-lg">
+                            <div className="flex items-start justify-between mb-3">
+                              <span className="text-sm font-medium text-gray-500">Request #{reqIndex + 1}</span>
+                              <button
+                                onClick={() => removePhotoRequest(space.id, request.id)}
+                                className="text-red-500 hover:text-red-600 text-sm"
+                              >
+                                Remove
+                              </button>
+                            </div>
+
+                            <div className="space-y-3">
+                              {/* Instruction */}
+                              <div>
+                                <label className="block text-sm text-gray-600 mb-1">Instruction</label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    value={request.instruction}
+                                    onChange={(e) => updatePhotoRequest(space.id, request.id, { instruction: e.target.value })}
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    placeholder="e.g., Take photo of bed made"
+                                  />
+                                  <button
+                                    onClick={() => translateInstruction(space.id, request.id, request.instruction, 'instruction')}
+                                    disabled={!request.instruction || translating === `${space.id}-${request.id}-instruction`}
+                                    className="px-3 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                                    title="Translate to all languages"
+                                  >
+                                    {translating === `${space.id}-${request.id}-instruction` ? (
+                                      <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                      <Languages className="w-5 h-5" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Location */}
+                              <div>
+                                <label className="block text-sm text-gray-600 mb-1">Location (where to stand)</label>
+                                <input
+                                  type="text"
+                                  value={request.location || ''}
+                                  onChange={(e) => updatePhotoRequest(space.id, request.id, { location: e.target.value })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                  placeholder="e.g., Center of room, doorway"
+                                />
+                              </div>
+
+                              {/* Hint */}
+                              <div>
+                                <label className="block text-sm text-gray-600 mb-1">Hint (optional)</label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    value={request.hint || ''}
+                                    onChange={(e) => updatePhotoRequest(space.id, request.id, { hint: e.target.value })}
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    placeholder="e.g., Make sure curtains are open"
+                                  />
+                                  <button
+                                    onClick={() => translateInstruction(space.id, request.id, request.hint || '', 'hint')}
+                                    disabled={!request.hint || translating === `${space.id}-${request.id}-hint`}
+                                    className="px-3 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                                    title="Translate to all languages"
+                                  >
+                                    {translating === `${space.id}-${request.id}-hint` ? (
+                                      <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                      <Languages className="w-5 h-5" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Options */}
+                              <div className="flex items-center gap-4">
+                                <label className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={request.required}
+                                    onChange={(e) => updatePhotoRequest(space.id, request.id, { required: e.target.checked })}
+                                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                  />
+                                  <span className="text-sm text-gray-600">Required</span>
+                                </label>
+                                <label className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={request.multiplePhotos}
+                                    onChange={(e) => updatePhotoRequest(space.id, request.id, { multiplePhotos: e.target.checked })}
+                                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                  />
+                                  <span className="text-sm text-gray-600">Allow multiple photos</span>
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
+
+        {/* Add Space Button */}
+        <button
+          onClick={addSpace}
+          className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-primary-500 hover:text-primary-600 transition"
+        >
+          <Plus className="w-5 h-5 inline-block mr-2" />
+          Add Space
+        </button>
       </div>
     </DashboardLayout>
   );
