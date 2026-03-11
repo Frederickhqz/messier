@@ -1,0 +1,130 @@
+{
+  "app": {
+    "name": "Messier",
+    "tagline": "Property Housekeeping Management"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "properties": "Properties",
+    "calendar": "Calendar",
+    "team": "Team",
+    "settings": "Settings"
+  },
+  "auth": {
+    "signIn": "Sign In",
+    "signOut": "Sign Out",
+    "email": "Email",
+    "password": "Password",
+    "login": "Login",
+    "loggingIn": "Logging in...",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?",
+    "signUp": "Sign Up",
+    "forgotPassword": "Forgot password?"
+  },
+  "roles": {
+    "admin": "Admin",
+    "member": "Member",
+    "cleaner": "Cleaner"
+  },
+  "property": {
+    "title": "Properties",
+    "add": "Add Property",
+    "edit": "Edit Property",
+    "name": "Property Name",
+    "address": "Address",
+    "active": "Active",
+    "inactive": "Inactive",
+    "noProperties": "No properties yet",
+    "rooms": {
+      "title": "Rooms Configuration",
+      "bedroom": "Bedroom",
+      "bathroom": "Bathroom",
+      "kitchen": "Kitchen",
+      "livingRoom": "Living Room",
+      "diningRoom": "Dining Room",
+      "office": "Office",
+      "garage": "Garage",
+      "patio": "Patio/Outside",
+      "laundry": "Laundry",
+      "other": "Other"
+    }
+  },
+  "service": {
+    "title": "Clean Services",
+    "new": "New Service",
+    "assign": "Assign Cleaners",
+    "date": "Date",
+    "status": "Status",
+    "pending": "Pending",
+    "inProgress": "In Progress",
+    "completed": "Completed",
+    "clockIn": "Clock In",
+    "clockOut": "Clock Out",
+    "assignedTo": "Assigned to",
+    "property": "Property",
+    "noServices": "No services scheduled"
+  },
+  "photo": {
+    "title": "Photos",
+    "upload": "Upload Photos",
+    "uploading": "Uploading...",
+    "roomType": "Room Type",
+    "noPhotos": "No photos uploaded yet",
+    "download": "Download",
+    "delete": "Delete"
+  },
+  "issue": {
+    "title": "Issues",
+    "report": "Report Issue",
+    "type": {
+      "title": "Issue Type",
+      "extraDirty": "Extra Dirty (Extra Charge)",
+      "maintenance": "Maintenance / Broken",
+      "inventory": "Low Inventory"
+    },
+    "description": "Description",
+    "photos": "Attach Photos",
+    "submitted": "Issue Submitted"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome, {name}",
+    "todayServices": "Today's Services",
+    "myAssignments": "My Assignments",
+    "allProperties": "All Properties",
+    "quickActions": "Quick Actions"
+  },
+  "calendar": {
+    "title": "Calendar",
+    "today": "Today",
+    "month": "Month",
+    "week": "Week",
+    "day": "Day"
+  },
+  "team": {
+    "title": "Team",
+    "addMember": "Add Member",
+    "name": "Name",
+    "email": "Email",
+    "role": "Role",
+    "actions": "Actions"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "confirm": "Confirm",
+    "search": "Search",
+    "filter": "Filter",
+    "all": "All",
+    "none": "None",
+    "yes": "Yes",
+    "no": "No"
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "app": {
+    "name": "Messier",
+    "tagline": "Gestión de Limpieza de Propiedades"
+  },
+  "nav": {
+    "dashboard": "Panel",
+    "properties": "Propiedades",
+    "calendar": "Calendario",
+    "team": "Equipo",
+    "settings": "Ajustes"
+  },
+  "auth": {
+    "signIn": "Iniciar Sesión",
+    "signOut": "Cerrar Sesión",
+    "email": "Correo",
+    "password": "Contraseña",
+    "login": "Entrar",
+    "loggingIn": "Entrando...",
+    "noAccount": "¿No tienes cuenta?",
+    "haveAccount": "¿Ya tienes cuenta?",
+    "signUp": "Registrarse",
+    "forgotPassword": "¿Olvidaste tu contraseña?"
+  },
+  "roles": {
+    "admin": "Administrador",
+    "member": "Miembro",
+    "cleaner": "Limpiador"
+  },
+  "property": {
+    "title": "Propiedades",
+    "add": "Añadir Propiedad",
+    "edit": "Editar Propiedad",
+    "name": "Nombre de Propiedad",
+    "address": "Dirección",
+    "active": "Activa",
+    "inactive": "Inactiva",
+    "noProperties": "Sin propiedades aún",
+    "rooms": {
+      "title": "Configuración de Habitaciones",
+      "bedroom": "Dormitorio",
+      "bathroom": "Baño",
+      "kitchen": "Cocina",
+      "livingRoom": "Sala de Estar",
+      "diningRoom": "Comedor",
+      "office": "Oficina",
+      "garage": "Garaje",
+      "patio": "Patio/Exterior",
+      "laundry": "Lavandería",
+      "other": "Otro"
+    }
+  },
+  "service": {
+    "title": "Servicios de Limpieza",
+    "new": "Nuevo Servicio",
+    "assign": "Asignar Limpiadores",
+    "date": "Fecha",
+    "status": "Estado",
+    "pending": "Pendiente",
+    "inProgress": "En Progreso",
+    "completed": "Completado",
+    "clockIn": "Entrar",
+    "clockOut": "Salir",
+    "assignedTo": "Asignado a",
+    "property": "Propiedad",
+    "noServices": "Sin servicios programados"
+  },
+  "photo": {
+    "title": "Fotos",
+    "upload": "Subir Fotos",
+    "uploading": "Subiendo...",
+    "roomType": "Tipo de Habitación",
+    "noPhotos": "Sin fotos aún",
+    "download": "Descargar",
+    "delete": "Eliminar"
+  },
+  "issue": {
+    "title": "Incidencias",
+    "report": "Reportar Incidencia",
+    "type": {
+      "title": "Tipo de Incidencia",
+      "extraDirty": "Muy Sucio (Cargo Extra)",
+      "maintenance": "Mantenimiento / Roto",
+      "inventory": "Inventario Bajo"
+    },
+    "description": "Descripción",
+    "photos": "Adjuntar Fotos",
+    "submitted": "Incidencia Enviada"
+  },
+  "dashboard": {
+    "title": "Panel",
+    "welcome": "Bienvenido, {name}",
+    "todayServices": "Servicios de Hoy",
+    "myAssignments": "Mis Asignaciones",
+    "allProperties": "Todas las Propiedades",
+    "quickActions": "Acciones Rápidas"
+  },
+  "calendar": {
+    "title": "Calendario",
+    "today": "Hoy",
+    "month": "Mes",
+    "week": "Semana",
+    "day": "Día"
+  },
+  "team": {
+    "title": "Equipo",
+    "addMember": "Añadir Miembro",
+    "name": "Nombre",
+    "email": "Correo",
+    "role": "Rol",
+    "actions": "Acciones"
+  },
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "add": "Añadir",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "confirm": "Confirmar",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "all": "Todos",
+    "none": "Ninguno",
+    "yes": "Sí",
+    "no": "No"
+  }
+}

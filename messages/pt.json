@@ -1,0 +1,130 @@
+{
+  "app": {
+    "name": "Messier",
+    "tagline": "Gestão de Limpeza de Propriedades"
+  },
+  "nav": {
+    "dashboard": "Painel",
+    "properties": "Propriedades",
+    "calendar": "Calendário",
+    "team": "Equipe",
+    "settings": "Configurações"
+  },
+  "auth": {
+    "signIn": "Entrar",
+    "signOut": "Sair",
+    "email": "Email",
+    "password": "Senha",
+    "login": "Login",
+    "loggingIn": "Entrando...",
+    "noAccount": "Não tem conta?",
+    "haveAccount": "Já tem conta?",
+    "signUp": "Cadastrar",
+    "forgotPassword": "Esqueceu a senha?"
+  },
+  "roles": {
+    "admin": "Administrador",
+    "member": "Membro",
+    "cleaner": "Faxineiro"
+  },
+  "property": {
+    "title": "Propriedades",
+    "add": "Adicionar Propriedade",
+    "edit": "Editar Propriedade",
+    "name": "Nome da Propriedade",
+    "address": "Endereço",
+    "active": "Ativa",
+    "inactive": "Inativa",
+    "noProperties": "Sem propriedades ainda",
+    "rooms": {
+      "title": "Configuração de Cômodos",
+      "bedroom": "Quarto",
+      "bathroom": "Banheiro",
+      "kitchen": "Cozinha",
+      "livingRoom": "Sala de Estar",
+      "diningRoom": "Sala de Jantar",
+      "office": "Escritório",
+      "garage": "Garagem",
+      "patio": "Pátio/Área Externa",
+      "laundry": "Lavanderia",
+      "other": "Outro"
+    }
+  },
+  "service": {
+    "title": "Serviços de Limpeza",
+    "new": "Novo Serviço",
+    "assign": "Atribuir Faxineiros",
+    "date": "Data",
+    "status": "Status",
+    "pending": "Pendente",
+    "inProgress": "Em Andamento",
+    "completed": "Concluído",
+    "clockIn": "Entrar",
+    "clockOut": "Sair",
+    "assignedTo": "Atribuído a",
+    "property": "Propriedade",
+    "noServices": "Sem serviços agendados"
+  },
+  "photo": {
+    "title": "Fotos",
+    "upload": "Enviar Fotos",
+    "uploading": "Enviando...",
+    "roomType": "Tipo de Cômodo",
+    "noPhotos": "Sem fotos ainda",
+    "download": "Baixar",
+    "delete": "Excluir"
+  },
+  "issue": {
+    "title": "Ocorrências",
+    "report": "Reportar Ocorrência",
+    "type": {
+      "title": "Tipo de Ocorrência",
+      "extraDirty": "Muito Sujo (Taxa Extra)",
+      "maintenance": "Manutenção / Quebrado",
+      "inventory": "Estoque Baixo"
+    },
+    "description": "Descrição",
+    "photos": "Anexar Fotos",
+    "submitted": "Ocorrência Enviada"
+  },
+  "dashboard": {
+    "title": "Painel",
+    "welcome": "Bem-vindo, {name}",
+    "todayServices": "Serviços de Hoje",
+    "myAssignments": "Minhas Atribuições",
+    "allProperties": "Todas as Propriedades",
+    "quickActions": "Ações Rápidas"
+  },
+  "calendar": {
+    "title": "Calendário",
+    "today": "Hoje",
+    "month": "Mês",
+    "week": "Semana",
+    "day": "Dia"
+  },
+  "team": {
+    "title": "Equipe",
+    "addMember": "Adicionar Membro",
+    "name": "Nome",
+    "email": "Email",
+    "role": "Função",
+    "actions": "Ações"
+  },
+  "common": {
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "add": "Adicionar",
+    "loading": "Carregando...",
+    "error": "Erro",
+    "success": "Sucesso",
+    "confirm": "Confirmar",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "all": "Todos",
+    "none": "Nenhum",
+    "yes": "Sim",
+    "no": "Não"
+  }
+}
