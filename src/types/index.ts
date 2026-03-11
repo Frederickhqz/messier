@@ -29,6 +29,7 @@ export interface Property {
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
+  walkthroughSteps?: string[]; // step IDs
 }
 
 // User profile (extends Firebase Auth)
@@ -45,6 +46,34 @@ export interface UserProfile {
 // Service status
 export type ServiceStatus = 'pending' | 'inProgress' | 'completed';
 
+// Walkthrough step (attached to property)
+export interface WalkthroughStep {
+  id: string;
+  propertyId: string;
+  order: number;
+  instruction: string;
+  roomType: RoomType;
+  required: boolean;
+  hint?: string;
+  createdAt: Date;
+}
+
+// Walkthrough completion for a service
+export interface WalkthroughCompletion {
+  id: string;
+  serviceId: string;
+  propertyId: string;
+  stepId: string;
+  photoUrl: string;
+  thumbnailUrl?: string;
+  notes?: string;
+  completedBy: string;
+  completedAt: Date;
+  approved?: boolean;
+  approvedBy?: string;
+  approvedAt?: Date;
+}
+
 // Clean Service
 export interface CleanService {
   id: string;
@@ -56,11 +85,13 @@ export interface CleanService {
   clockIn?: Date;
   clockOut?: Date;
   notes?: string;
+  walkthroughProgress?: number; // steps completed
+  walkthroughTotal?: number; // total steps
   createdAt: Date;
   createdBy: string;
 }
 
-// Photo
+// Photo (legacy, keeping for compatibility)
 export interface Photo {
   id: string;
   serviceId: string;

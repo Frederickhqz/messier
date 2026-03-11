@@ -260,7 +260,23 @@ export default function ServiceDetailPage() {
         )}
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Walkthrough - Primary action for assigned cleaners */}
+          {(isAssigned || isAdmin) && service.status !== 'completed' && (
+            <Link
+              href={`/${locale}/services/${serviceId}/walkthrough`}
+              className="bg-primary-600 rounded-xl shadow-sm p-6 hover:bg-primary-700 transition flex items-center gap-4"
+            >
+              <div className="p-3 bg-white/20 rounded-lg">
+                <Camera className="w-6 h-6 text-white" />
+              </div>
+              <div className="text-white">
+                <h3 className="font-semibold">Photo Walkthrough</h3>
+                <p className="text-sm opacity-90">Take step-by-step photos</p>
+              </div>
+            </Link>
+          )}
+
           <Link
             href={`/${locale}/services/${serviceId}/photos`}
             className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition flex items-center gap-4"

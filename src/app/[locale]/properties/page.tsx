@@ -9,6 +9,7 @@ import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp
 import { db } from '@/lib/firebase';
 import { Property, RoomConfig, RoomType } from '@/types';
 import { Plus, Edit2, Trash2, Bed, Bath, UtensilsCrossed, Sofa, X } from 'lucide-react';
+import Link from 'next/link';
 
 const roomTypeLabels: Record<RoomType, string> = {
   bedroom: 'property.rooms.bedroom',
@@ -213,6 +214,14 @@ export default function PropertiesPage() {
                     {property.active ? t('property.active') : t('property.inactive')}
                   </span>
                 </div>
+
+                {/* Walkthrough Link */}
+                <Link
+                  href={`/${locale}/properties/${property.id}/walkthrough`}
+                  className="mt-4 block w-full text-center py-2 px-4 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition text-sm font-medium"
+                >
+                  Configure Walkthrough
+                </Link>
               </div>
             ))}
           </div>
