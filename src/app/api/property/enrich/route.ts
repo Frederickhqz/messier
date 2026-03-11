@@ -179,8 +179,8 @@ export async function GET(request: NextRequest) {
       
       if (process.env.RENTCAST_API_KEY) {
         try {
+          // RentCast API uses /v1/properties endpoint
           // Try different address formats for RentCast
-          // Format 1: Full address as provided
           const addressFormats = [
             address, // Original
             address.replace(/,\s*USA$/i, '').replace(/,\s*United States$/i, ''), // Remove country
@@ -190,7 +190,8 @@ export async function GET(request: NextRequest) {
           let rentcastData = null;
           
           for (const addr of addressFormats) {
-            const rentcastUrl = `https://api.rentcast.io/v1/property?address=${encodeURIComponent(addr)}`;
+            // Correct endpoint: /v1/properties (plural)
+            const rentcastUrl = `https://api.rentcast.io/v1/properties?address=${encodeURIComponent(addr)}&limit=1`;
             console.log('Trying RentCast:', addr);
             
             const rentcastResponse = await fetch(rentcastUrl, {
@@ -202,12 +203,18 @@ export async function GET(request: NextRequest) {
             console.log('RentCast status:', rentcastResponse.status);
             
             if (rentcastResponse.ok) {
-              rentcastData = await rentcastResponse.json();
-              console.log('RentCast response:', JSON.stringify(rentcastData, null, 2));
-              break;
+              const result = await rentcastResponse.json();
+              // RentCast returns an array of properties
+              if (result && result.length > 0) {
+                rentcastData = result[0]; // Take the first match
+                console.log('RentCast response:', JSON.stringify(rentcastData, null, 2));
+                break;
+              } else {
+                console.log('RentCast returned empty array for format:', addr);
+              }
             } else {
               const errorText = await rentcastResponse.text();
-              console.log('RentCast not found for format:', addr);
+              console.log('RentCast error for format:', addr, errorText);
             }
           }
             
