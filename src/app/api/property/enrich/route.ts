@@ -214,11 +214,16 @@ export async function GET(request: NextRequest) {
             }
           } else {
             const errorText = await rentcastResponse.text();
-            console.log('RentCast API error:', rentcastResponse.status, errorText);
+            console.log('RentCast API not found for address (this is normal for some properties):', address);
+            // RentCast doesn't have this property - user can enter details manually
+            propertyData.rentcastNotFound = true;
           }
         } catch (e) {
           console.log('RentCast API exception:', e);
+          // Continue without RentCast data
         }
+      } else {
+        console.log('RENTCAST_API_KEY not configured');
       }
       
       // Generate description

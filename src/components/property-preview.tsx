@@ -142,26 +142,32 @@ export default function PropertyPreview({
             </div>
           </div>
           
-          {data.squareFeet && (
-            <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-              <Maximize className="w-5 h-5 text-primary-600" />
-              <div>
-                <div className="text-lg font-semibold">{data.squareFeet.toLocaleString()}</div>
-                <div className="text-xs text-gray-500">Sq Ft</div>
-              </div>
+          <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+            <Maximize className="w-5 h-5 text-primary-600" />
+            <div>
+              <div className="text-lg font-semibold">{data.squareFeet ? data.squareFeet.toLocaleString() : '-'}</div>
+              <div className="text-xs text-gray-500">Sq Ft</div>
             </div>
-          )}
+          </div>
           
-          {data.yearBuilt && (
-            <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-              <Calendar className="w-5 h-5 text-primary-600" />
-              <div>
-                <div className="text-lg font-semibold">{data.yearBuilt}</div>
-                <div className="text-xs text-gray-500">Year Built</div>
-              </div>
+          <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+            <Calendar className="w-5 h-5 text-primary-600" />
+            <div>
+              <div className="text-lg font-semibold">{data.yearBuilt || '-'}</div>
+              <div className="text-xs text-gray-500">Year Built</div>
             </div>
-          )}
+          </div>
         </div>
+
+        {/* Manual entry notice */}
+        {data.enriched && !data.bedrooms && !data.bathrooms && !data.squareFeet && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-sm text-amber-800">
+              <strong>Note:</strong> Property details not found in database. 
+              You can manually update bedrooms, bathrooms, and other details after creating the property.
+            </p>
+          </div>
+        )}
 
         {/* Property type */}
         {data.propertyType && (
