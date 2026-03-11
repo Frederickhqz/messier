@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Uses the Firebase API key (same project, Places API enabled)
-const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+// Google Places API key - needs to be enabled in Google Cloud Console
+// Can be the same as Firebase API key if Places API is enabled in the same project
+const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.GOOGLE_PLACES_API_KEY;
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,27 +11,60 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const action = searchParams.get('action');
   
+  // Check if API key is available
+  if (!GOOGLE_API_KEY) {
+    console.warn('Google Places API key not configured');
+    return NextResponse.json({ 
+      error: 'API key not configured',
+      predictions: [],
+      note: 'Set GOOGLE_PLACES_API_KEY or enable Places API in Google Cloud Console'
+    });
+  }
+  
   if (action === 'autocomplete') {
     const input = searchParams.get('input');
     if (!input) {
       return NextResponse.json({ error: 'Input required' }, { status: 400 });
     }
     
+    // Don't call API for very short inputs
+    if (input.length < 3) {
+      return NextResponse.json({ predictions: [] });
+    }
+    
     try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&types=address&key=${GOOGLE_API_KEY}`
-      );
+      const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&types=address&key=${GOOGLE_API_KEY}`;
+      console.log('Calling Google Places autocomplete for:', input);
+      
+      const response = await fetch(url);
       const data = await response.json();
       
+      console.log('Google Places response:', data.status, data.error_message || '');
+      
+      if (data.status === 'REQUEST_DENIED') {
+        console.error('Places API access denied:', data.error_message);
+        return NextResponse.json({ 
+          predictions: [],
+          error: 'Places API not enabled. Please enable Places API in Google Cloud Console.',
+          details: data.error_message
+        });
+      }
+      
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        console.error('Google Places API error:', data);
+        console.error('Google Places API error:', data.status, data.error_message);
         return NextResponse.json({ predictions: [] });
       }
       
-      return NextResponse.json({ predictions: data.predictions || [] });
+      return NextResponse.json({ 
+        predictions: data.predictions || [],
+        status: data.status 
+      });
     } catch (error) {
       console.error('Autocomplete error:', error);
-      return NextResponse.json({ predictions: [] });
+      return NextResponse.json({ 
+        predictions: [],
+        error: 'Failed to fetch address suggestions'
+      });
     }
   }
   
@@ -41,14 +75,13 @@ export async function GET(request: NextRequest) {
     }
     
     try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_address,geometry,photos,name,types&key=${GOOGLE_API_KEY}`
-      );
+      const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_address,geometry,photos,name,types,address_components&key=${GOOGLE_API_KEY}`;
+      const response = await fetch(url);
       const data = await response.json();
       
       if (data.status !== 'OK') {
-        console.error('Google Places Details API error:', data);
-        return NextResponse.json({ error: 'Place not found' }, { status: 404 });
+        console.error('Google Places Details API error:', data.status, data.error_message);
+        return NextResponse.json({ error: 'Place not found', details: data.error_message }, { status: 404 });
       }
       
       const result = data.result;
@@ -101,36 +134,44 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Address required' }, { status: 400 });
     }
     
+    // Always return success with the address, even if enrichment fails
+    let propertyData: Record<string, any> = {
+      address,
+      enriched: false
+    };
+    
     try {
-      // Use RentCast API for property data (if available)
-      // Fallback to estimated data based on address parsing
-      
-      let propertyData: Record<string, any> = {
-        address,
-        enriched: true
-      };
-      
-      // If we have a placeId, get Google Places data first
+      // If we have a placeId, get Google Places data
       if (placeId && GOOGLE_API_KEY) {
-        const placesResponse = await fetch(
-          `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_address,geometry,photos,name,types&key=${GOOGLE_API_KEY}`
-        );
-        const placesData = await placesResponse.json();
-        
-        if (placesData.status === 'OK') {
-          const result = placesData.result;
+        try {
+          const placesResponse = await fetch(
+            `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_address,geometry,photos,name,types&key=${GOOGLE_API_KEY}`
+          );
+          const placesData = await placesResponse.json();
           
-          propertyData.latitude = result.geometry?.location?.lat;
-          propertyData.longitude = result.geometry?.location?.lng;
-          propertyData.formattedAddress = result.formatted_address;
-          
-          // Get first photo as main photo
-          if (result.photos && result.photos.length > 0) {
-            propertyData.mainPhoto = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${result.photos[0].photo_reference}&key=${GOOGLE_API_KEY}`;
-            propertyData.photos = result.photos.slice(0, 5).map((photo: any) =>
-              `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${photo.photo_reference}&key=${GOOGLE_API_KEY}`
-            );
+          if (placesData.status === 'OK') {
+            const result = placesData.result;
+            
+            propertyData = {
+              ...propertyData,
+              enriched: true,
+              latitude: result.geometry?.location?.lat,
+              longitude: result.geometry?.location?.lng,
+              formattedAddress: result.formatted_address
+            };
+            
+            // Get first photo as main photo
+            if (result.photos && result.photos.length > 0) {
+              propertyData.mainPhoto = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${result.photos[0].photo_reference}&key=${GOOGLE_API_KEY}`;
+              propertyData.photos = result.photos.slice(0, 5).map((photo: any) =>
+                `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${photo.photo_reference}&key=${GOOGLE_API_KEY}`
+              );
+            }
+          } else {
+            console.log('Places enrichment failed:', placesData.status, placesData.error_message);
           }
+        } catch (e) {
+          console.log('Places API error:', e);
         }
       }
       
@@ -155,24 +196,26 @@ export async function GET(request: NextRequest) {
                 lotSize: rentcastData.lotSize
               };
               
-              // Generate bedroom config based on bedroom count
               if (rentcastData.bedrooms) {
                 propertyData.bedroomConfig = generateBedroomConfig(rentcastData.bedrooms);
               }
             }
           }
-        } catch (rentcastError) {
-          console.log('RentCast API not available, using defaults');
+        } catch (e) {
+          console.log('RentCast API not available:', e);
         }
       }
       
       // Generate description
-      propertyData.description = generateDescription(propertyData);
+      if (propertyData.enriched) {
+        propertyData.description = generateDescription(propertyData);
+      }
       
       return NextResponse.json(propertyData);
     } catch (error) {
       console.error('Enrichment error:', error);
-      return NextResponse.json({ error: 'Failed to enrich property' }, { status: 500 });
+      // Return address even on error
+      return NextResponse.json({ address, enriched: false });
     }
   }
   

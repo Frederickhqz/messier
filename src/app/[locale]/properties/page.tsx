@@ -8,8 +8,7 @@ import DashboardLayout from '@/components/dashboard-layout';
 import AddressAutocomplete from '@/components/address-autocomplete';
 import PropertyPreview from '@/components/property-preview';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadString, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { Property, RoomConfig, RoomType, BedroomConfig } from '@/types';
 import { Plus, Edit2, Trash2, Bed, Bath, UtensilsCrossed, Sofa, X, Loader2, Sparkles } from 'lucide-react';
 import Link from 'next/link';
@@ -147,92 +146,40 @@ export default function PropertiesPage() {
   };
 
   const uploadPhoto = async (photoUrl: string, propertyId: string): Promise<string> => {
-    try {
-      const response = await fetch(photoUrl);
-      const blob = await response.blob();
-      const arrayBuffer = await blob.arrayBuffer();
-      const base64 = Buffer.from(arrayBuffer).toString('base64');
-      
-      const storageRef = ref(storage, `properties/${propertyId}/photos/${Date.now()}.jpg`);
-      await uploadString(storageRef, `data:image/jpeg;base64,${base64}`, 'data_url');
-      
-      return await getDownloadURL(storageRef);
-    } catch (error) {
-      console.error('Error uploading photo:', error);
-      return photoUrl; // Return original URL if upload fails
-    }
+    // For now, just return the original URL
+    // Photo uploads will be handled server-side or via direct storage upload
+    return photoUrl;
   };
 
   const handleConfirmProperty = async (data: Partial<Property>) => {
     setSaving(true);
     
     try {
-      // Create property
+      // Create property with basic data
       const propertyData: any = {
-        name: name || data.address?.split(',')[0] || 'Untitled Property',
-        address: address,
+        name: name || (data.address ? data.address.split(',')[0] : 'Untitled Property'),
+        address: address || data.address || '',
         rooms: rooms,
         active: true,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        createdBy: user?.uid,
-        
-        // Enriched data
-        enriched: data.enriched || false,
-        placeId: placeId,
-        
-        propertyType: data.propertyType,
-        bedrooms: data.bedrooms,
-        bathrooms: data.bathrooms,
-        halfBathrooms: data.halfBathrooms,
-        squareFeet: data.squareFeet,
-        yearBuilt: data.yearBuilt,
-        lotSize: data.lotSize,
-        
-        bedroomConfig: data.bedroomConfig,
-        description: data.description,
-        
-        latitude: data.latitude,
-        longitude: data.longitude,
-        neighborhood: data.neighborhood,
-        city: data.city,
-        state: data.state,
-        zipCode: data.zipCode,
-        
-        amenities: data.amenities
+        createdBy: user?.uid
       };
-
-      const docRef = await addDoc(collection(db, 'properties'), propertyData);
       
-      // Upload main photo if available
-      if (data.mainPhoto) {
-        try {
-          const uploadedUrl = await uploadPhoto(data.mainPhoto, docRef.id);
-          await updateDoc(doc(db, 'properties', docRef.id), {
-            mainPhoto: uploadedUrl
-          });
-        } catch (photoError) {
-          console.error('Error uploading main photo:', photoError);
-        }
-      }
-      
-      // Upload additional photos if available
-      if (data.photos && data.photos.length > 0) {
-        const uploadedPhotos: string[] = [];
-        for (let i = 0; i < Math.min(data.photos.length, 5); i++) {
-          try {
-            const uploadedUrl = await uploadPhoto(data.photos[i], docRef.id);
-            uploadedPhotos.push(uploadedUrl);
-          } catch (e) {
-            console.error('Error uploading photo:', e);
-          }
-        }
-        if (uploadedPhotos.length > 0) {
-          await updateDoc(doc(db, 'properties', docRef.id), {
-            photos: uploadedPhotos
-          });
-        }
-      }
+      // Only add enrichment fields if they exist
+      if (data.enriched !== undefined) propertyData.enriched = data.enriched;
+      if (placeId) propertyData.placeId = placeId;
+      if (data.propertyType) propertyData.propertyType = data.propertyType;
+      if (data.bedrooms) propertyData.bedrooms = data.bedrooms;
+      if (data.bathrooms) propertyData.bathrooms = data.bathrooms;
+      if (data.squareFeet) propertyData.squareFeet = data.squareFeet;
+      if (data.yearBuilt) propertyData.yearBuilt = data.yearBuilt;
+      if (data.bedroomConfig) propertyData.bedroomConfig = data.bedroomConfig;
+      if (data.description) propertyData.description = data.description;
+      if (data.latitude) propertyData.latitude = data.latitude;
+      if (data.longitude) propertyData.longitude = data.longitude;
+      if (data.mainPhoto) propertyData.mainPhoto = data.mainPhoto;
+      if (data.photos) propertyData.photos = data.photos.slice(0, 5);
       
       // Reset form
       setShowModal(false);
