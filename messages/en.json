@@ -109,7 +109,21 @@
     "name": "Name",
     "email": "Email",
     "role": "Role",
-    "actions": "Actions"
+    "actions": "Actions",
+    "inviteMember": "Invite Team Member",
+    "inviteNamePlaceholder": "Full name",
+    "inviteEmailPlaceholder": "Email address",
+    "changeRole": "Change role",
+    "deactivate": "Deactivate",
+    "activate": "Activate",
+    "cannotDeactivateSelf": "You cannot deactivate your own account.",
+    "userAlreadyExists": "A user with this email already exists.",
+    "inviteFailed": "Failed to invite user. Please try again.",
+    "roleUpdateFailed": "Failed to update role. Please try again.",
+    "statusUpdateFailed": "Failed to update user status. Please try again.",
+    "activeMember": "Active",
+    "inactiveMember": "Inactive",
+    "noTeamMembers": "No team members yet"
   },
   "common": {
     "save": "Save",
@@ -129,6 +143,17 @@
     "no": "No",
     "back": "Back",
     "notes": "Notes",
+    "placeholders": {
+      "name": "Your name",
+      "email": "email@example.com",
+      "password": "••••••••",
+      "propertyName": "Beach House #1",
+      "propertyAddress": "123 Ocean Dr, Miami FL",
+      "memberName": "John Doe",
+      "memberEmail": "john@example.com",
+      "describeIssue": "Describe the issue...",
+      "specialInstructions": "Special instructions..."
+    },
     "offline": {
       "title": "Offline Mode",
       "message": "Changes will sync when you're back online",

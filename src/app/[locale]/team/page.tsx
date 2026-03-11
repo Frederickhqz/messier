@@ -75,7 +75,7 @@ export default function TeamPage() {
       );
       
       if (!existingSnap.empty) {
-        alert('A user with this email already exists.');
+        alert(t('team.userAlreadyExists'));
         setSubmitting(false);
         return;
       }
@@ -109,7 +109,7 @@ export default function TeamPage() {
       loadUsers();
     } catch (error) {
       console.error('Error inviting user:', error);
-      alert('Failed to invite user. Please try again.');
+      alert(t('team.inviteFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -125,13 +125,13 @@ export default function TeamPage() {
       setEditUserId(null);
     } catch (error) {
       console.error('Error updating role:', error);
-      alert('Failed to update role. Please try again.');
+      alert(t('team.roleUpdateFailed'));
     }
   };
 
   const handleToggleActive = async (userId: string, currentActive: boolean) => {
     if (userId === user?.uid) {
-      alert("You cannot deactivate your own account.");
+      alert(t('team.cannotDeactivateSelf'));
       return;
     }
 
@@ -143,7 +143,7 @@ export default function TeamPage() {
       setUsers(users.map(u => u.uid === userId ? { ...u, active: !currentActive } : u));
     } catch (error) {
       console.error('Error toggling active:', error);
-      alert('Failed to update user status. Please try again.');
+      alert(t('team.statusUpdateFailed'));
     }
   };
 
@@ -279,7 +279,7 @@ export default function TeamPage() {
                     <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                       member.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {member.active ? 'Active' : 'Inactive'}
+                      {member.active ? t('team.activeMember') : t('team.inactiveMember')}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
@@ -287,7 +287,7 @@ export default function TeamPage() {
                       <button
                         onClick={() => setEditUserId(member.uid)}
                         className="p-2 text-gray-400 hover:text-gray-600 transition"
-                        title="Change role"
+                        title={t('team.changeRole')}
                       >
                         <Edit className="w-4 h-4" />
                       </button>
@@ -296,7 +296,7 @@ export default function TeamPage() {
                         className={`p-2 transition ${
                           member.active ? 'text-red-400 hover:text-red-600' : 'text-green-400 hover:text-green-600'
                         }`}
-                        title={member.active ? 'Deactivate' : 'Activate'}
+                        title={member.active ? t('team.deactivate') : t('team.activate')}
                         disabled={member.uid === user?.uid}
                       >
                         {member.active ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
@@ -312,7 +312,7 @@ export default function TeamPage() {
         {users.length === 0 && (
           <div className="bg-white rounded-xl shadow-sm p-12 text-center">
             <UserIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p className="text-gray-500">No team members yet. Invite your first member!</p>
+            <p className="text-gray-500">{t('team.noTeamMembers')}</p>
           </div>
         )}
       </div>
@@ -341,7 +341,7 @@ export default function TeamPage() {
                   value={inviteName}
                   onChange={(e) => setInviteName(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                  placeholder="John Doe"
+                  placeholder={t('common.placeholders.memberName')}
                   required
                 />
               </div>
@@ -355,7 +355,7 @@ export default function TeamPage() {
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                  placeholder="john@example.com"
+                  placeholder={t('common.placeholders.memberEmail')}
                   required
                 />
               </div>

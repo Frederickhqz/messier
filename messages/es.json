@@ -109,7 +109,21 @@
     "name": "Nombre",
     "email": "Correo",
     "role": "Rol",
-    "actions": "Acciones"
+    "actions": "Acciones",
+    "inviteMember": "Invitar Miembro del Equipo",
+    "inviteNamePlaceholder": "Nombre completo",
+    "inviteEmailPlaceholder": "Dirección de correo",
+    "changeRole": "Cambiar rol",
+    "deactivate": "Desactivar",
+    "activate": "Activar",
+    "cannotDeactivateSelf": "No puedes desactivar tu propia cuenta.",
+    "userAlreadyExists": "Ya existe un usuario con este correo.",
+    "inviteFailed": "Error al invitar usuario. Por favor intenta de nuevo.",
+    "roleUpdateFailed": "Error al actualizar el rol. Por favor intenta de nuevo.",
+    "statusUpdateFailed": "Error al actualizar el estado del usuario. Por favor intenta de nuevo.",
+    "activeMember": "Activo",
+    "inactiveMember": "Inactivo",
+    "noTeamMembers": "Sin miembros del equipo aún"
   },
   "common": {
     "save": "Guardar",
@@ -129,6 +143,17 @@
     "no": "No",
     "back": "Volver",
     "notes": "Notas",
+    "placeholders": {
+      "name": "Tu nombre",
+      "email": "correo@ejemplo.com",
+      "password": "••••••••",
+      "propertyName": "Casa de Playa #1",
+      "propertyAddress": "123 Calle Océano, Miami FL",
+      "memberName": "Juan Pérez",
+      "memberEmail": "juan@ejemplo.com",
+      "describeIssue": "Describe el problema...",
+      "specialInstructions": "Instrucciones especiales..."
+    },
     "offline": {
       "title": "Modo Sin Conexión",
       "message": "Los cambios se sincronizarán cuando vuelvas a estar en línea",

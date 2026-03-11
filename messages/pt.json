@@ -109,7 +109,21 @@
     "name": "Nome",
     "email": "Email",
     "role": "Função",
-    "actions": "Ações"
+    "actions": "Ações",
+    "inviteMember": "Convidar Membro da Equipe",
+    "inviteNamePlaceholder": "Nome completo",
+    "inviteEmailPlaceholder": "Endereço de email",
+    "changeRole": "Alterar função",
+    "deactivate": "Desativar",
+    "activate": "Ativar",
+    "cannotDeactivateSelf": "Você não pode desativar sua própria conta.",
+    "userAlreadyExists": "Já existe um usuário com este email.",
+    "inviteFailed": "Erro ao convidar usuário. Por favor tente novamente.",
+    "roleUpdateFailed": "Erro ao atualizar função. Por favor tente novamente.",
+    "statusUpdateFailed": "Erro ao atualizar status do usuário. Por favor tente novamente.",
+    "activeMember": "Ativo",
+    "inactiveMember": "Inativo",
+    "noTeamMembers": "Sem membros da equipe ainda"
   },
   "common": {
     "save": "Salvar",
@@ -129,6 +143,17 @@
     "no": "Não",
     "back": "Voltar",
     "notes": "Notas",
+    "placeholders": {
+      "name": "Seu nome",
+      "email": "email@exemplo.com",
+      "password": "••••••••",
+      "propertyName": "Casa de Praia #1",
+      "propertyAddress": "123 Rua do Oceano, Miami FL",
+      "memberName": "João Silva",
+      "memberEmail": "joao@exemplo.com",
+      "describeIssue": "Descreva o problema...",
+      "specialInstructions": "Instruções especiais..."
+    },
     "offline": {
       "title": "Modo Offline",
       "message": "As alterações serão sincronizadas quando você estiver online novamente",
