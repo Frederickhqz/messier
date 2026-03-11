@@ -14,7 +14,8 @@ import {
   LogOut, 
   Menu, 
   X,
-  Globe
+  Globe,
+  ClipboardList
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -33,8 +34,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const navItems = [
     { href: '/dashboard', label: t('nav.dashboard'), icon: Home },
+    { href: '/services', label: t('nav.services'), icon: ClipboardList },
     { href: '/properties', label: t('nav.properties'), icon: Building2, adminOnly: true },
-    { href: '/calendar', label: t('nav.calendar'), icon: Calendar },
     { href: '/team', label: t('nav.team'), icon: Users, adminOnly: true },
     { href: '/settings', label: t('nav.settings'), icon: Settings },
   ].filter(item => !item.adminOnly || isAdmin);

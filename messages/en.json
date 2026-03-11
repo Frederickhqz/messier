@@ -5,6 +5,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "services": "Services",
     "properties": "Properties",
     "calendar": "Calendar",
     "team": "Team",
@@ -125,6 +126,16 @@
     "all": "All",
     "none": "None",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "back": "Back",
+    "notes": "Notes"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "properties": "Properties",
+    "services": "Services",
+    "calendar": "Calendar",
+    "team": "Team",
+    "settings": "Settings"
   }
 }
