@@ -46,3 +46,4 @@ public/worker-*.js
 
 # Firebase Admin (never commit)
 .firebase/
+service-account.json

@@ -1,49 +1,30 @@
-# Firebase Setup for Messier
+# Firebase Security Rules for Messier
 
-## 1. Create Firebase Project (if needed)
+## Deploy Status
 
-You already have project `messier-mavuja` - skip this step.
+✅ **Rules files created:** `firestore.rules`, `storage.rules`, `firestore.indexes.json`
 
-## 2. Enable Services
+⚠️ **Deployment requires Firebase Console access** - The service account lacks IAM permissions for CLI deployment.
 
-In Firebase Console (https://console.firebase.google.com/project/messier-mavuja):
+## Deploy via Firebase Console
 
-### Authentication
-1. Go to **Authentication** > **Sign-in method**
-2. Enable **Email/Password**
-3. Save
+### Firestore Rules
+1. Go to: https://console.firebase.google.com/project/messier-mavuja/firestore/rules
+2. Copy the contents of `firestore.rules` (below)
+3. Paste and publish
 
-### Firestore Database
-1. Go to **Firestore Database**
-2. Click **Create database**
-3. Start in **production mode**
-4. Choose location closest to your users
-5. Apply security rules below
+### Firestore Indexes
+1. Go to: https://console.firebase.google.com/project/messier-mavuja/firestore/indexes
+2. Add indexes manually or use the error links from console
 
-### Storage
-1. Go to **Storage**
-2. Click **Get started**
-3. Apply security rules below
+### Storage Rules
+1. Go to: https://console.firebase.google.com/project/messier-mavuja/storage/rules
+2. Copy the contents of `storage.rules` (below)
+3. Paste and publish
 
-## 3. Get Web App Config
+---
 
-1. Go to **Project Settings** (gear icon) > **General**
-2. Scroll to **Your apps**
-3. If no web app exists, click **Add app** > **Web**
-4. Copy the config values to `.env.local`:
-
-```
-NEXT_PUBLIC_FIREBASE_API_KEY=AIza...
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=messier-mavuja.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=messier-mavuja
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=messier-mavuja.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=123456789
-NEXT_PUBLIC_FIREBASE_APP_ID=1:123456789:web:abc123
-```
-
-## 4. Firestore Security Rules
-
-Go to **Firestore Database** > **Rules** and paste:
+## Firestore Rules (firestore.rules)
 
 ```javascript
 rules_version = '2';
@@ -51,7 +32,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Helper function to check admin role
     function isAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
     // Helper function to check if user exists and is active
@@ -108,77 +90,63 @@ service cloud.firestore {
 }
 ```
 
-## 5. Storage Security Rules
-
-Go to **Storage** > **Rules** and paste:
+## Storage Rules (storage.rules)
 
 ```javascript
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Photos folder - authenticated users can upload, anyone can read
+    // Helper function to check admin role
+    function isAdmin() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Helper function to check if user is authenticated and active
+    function isActiveUser() {
+      return request.auth != null && 
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.active == true;
+    }
+    
+    // Photos folder - authenticated active users can upload, anyone can read (for service sharing)
     match /photos/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isActiveUser();
     }
     
     // Issue photos
     match /issues/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isActiveUser();
+    }
+    
+    // User profile photos
+    match /profiles/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
   }
 }
 ```
 
-## 6. Create First Admin User
+## Firestore Indexes (firestore.indexes.json)
 
-After the app is deployed and running:
+Recommended indexes for optimized queries:
 
-1. Go to the app and sign up with your email
-2. Go to **Firestore Database** > **Data**
-3. Find the `users` collection
-4. Edit your user document
-5. Change `role` from `"member"` to `"admin"`
+| Collection | Fields |
+|------------|--------|
+| cleanServices | `date` ASC, `status` ASC |
+| cleanServices | `assignedCleaners` ASC, `date` ASC |
+| cleanServices | `propertyId` ASC, `date` ASC |
+| issues | `status` ASC, `createdAt` DESC |
+| photos | `serviceId` ASC, `uploadedAt` DESC |
 
-## 7. Enable Push Notifications (Optional)
+## IAM Permissions for CLI Deployment
 
-1. Go to **Project Settings** > **Cloud Messaging**
-2. Generate a new private key (for server-side FCM)
-3. Add to your environment:
+To deploy rules via Firebase CLI, the service account needs these roles:
+- `roles/serviceusage.serviceUsageConsumer`
+- `roles/firebaserules.admin`
+- `roles/firestore.admin`
+- `roles/firebaseadmin.admin`
 
-```
-NEXT_PUBLIC_FIREBASE_VAPID_KEY=your_vapid_key_here
-```
-
-4. For push notifications in browser, you'll need to set up a service worker
-
-## 8. Deploy to Vercel
-
-```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Login
-vercel login
-
-# Deploy
-vercel
-```
-
-## 9. Set Environment Variables in Vercel
-
-Go to your Vercel project dashboard:
-1. **Settings** > **Environment Variables**
-2. Add all `NEXT_PUBLIC_*` variables from `.env.local`
-3. Redeploy
-
-## Firestore Indexes (Recommended)
-
-For optimized queries, add these indexes in Firebase Console:
-
-**cleanServices collection:**
-- Fields: `date` (Ascending), `status` (Ascending)
-- Fields: `assignedCleaners` (Array contains), `date` (Ascending)
-
-You'll see index errors in the console if queries need indexes - Firebase provides a direct link to create them.
+Apply at: https://console.developers.google.com/iam-admin/iam?project=messier-mavuja
