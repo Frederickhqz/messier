@@ -29,6 +29,7 @@ export interface BedroomConfig {
     size: BedSize;
     quantity: number;
   }>;
+  bathroomType?: 'full' | 'half' | 'none'; // ensuite bathroom
 }
 
 // Property type

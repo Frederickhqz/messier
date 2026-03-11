@@ -32,7 +32,20 @@ export default function AddressAutocomplete({
   const [selectedIndex, setSelectedIndex] = useState(-1);
   
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setShowPredictions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (debounceRef.current) {
@@ -41,6 +54,7 @@ export default function AddressAutocomplete({
 
     if (value.length < 3) {
       setPredictions([]);
+      setShowPredictions(false);
       return;
     }
 
@@ -65,7 +79,7 @@ export default function AddressAutocomplete({
       );
       const data = await response.json();
       setPredictions(data.predictions || []);
-      setShowPredictions(true);
+      setShowPredictions(data.predictions?.length > 0);
     } catch (error) {
       console.error('Error fetching predictions:', error);
     } finally {
@@ -107,7 +121,7 @@ export default function AddressAutocomplete({
   };
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <input
         ref={inputRef}
         type="text"
@@ -120,10 +134,6 @@ export default function AddressAutocomplete({
           if (predictions.length > 0) {
             setShowPredictions(true);
           }
-        }}
-        onBlur={() => {
-          // Delay to allow clicking on predictions
-          setTimeout(() => setShowPredictions(false), 200);
         }}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}

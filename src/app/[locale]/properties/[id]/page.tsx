@@ -97,12 +97,6 @@ export default function PropertyDetailPage() {
 
   const isAdmin = profile?.role === 'admin';
 
-  // Format bedroom config for display
-  const bedroomSummary = property.bedroomConfig?.map(room => {
-    const beds = room.beds.map(b => `${b.quantity}x ${b.size}`).join(', ');
-    return { name: room.name || `Bedroom ${room.roomNumber}`, beds };
-  });
-
   return (
     <DashboardLayout>
       <div className="max-w-4xl mx-auto space-y-6">
@@ -193,14 +187,22 @@ export default function PropertyDetailPage() {
             )}
 
             {/* Bedroom Configuration */}
-            {bedroomSummary && bedroomSummary.length > 0 && (
+            {property.bedroomConfig && property.bedroomConfig.length > 0 && (
               <div className="mt-6">
                 <h3 className="font-medium text-gray-900 mb-3">Bedroom Configuration</h3>
                 <div className="space-y-2">
-                  {bedroomSummary.map((room, i) => (
+                  {property.bedroomConfig.map((room, i) => (
                     <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <span className="font-medium">{room.name}</span>
-                      <span className="text-gray-600 capitalize">{room.beds}</span>
+                      <div>
+                        <span className="font-medium">{room.name || `Bedroom ${room.roomNumber}`}</span>
+                        {room.bathroomType === 'full' && (
+                          <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">Ensuite</span>
+                        )}
+                        {room.bathroomType === 'half' && (
+                          <span className="ml-2 px-2 py-0.5 text-xs bg-gray-200 text-gray-700 rounded">½ Bath</span>
+                        )}
+                      </div>
+                      <span className="text-gray-600 capitalize">{room.beds.map(b => `${b.quantity}×${b.size}`).join(' + ')}</span>
                     </div>
                   ))}
                 </div>

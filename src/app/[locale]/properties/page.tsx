@@ -1,30 +1,44 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/auth-context';
 import DashboardLayout from '@/components/dashboard-layout';
 import AddressAutocomplete from '@/components/address-autocomplete';
 import PropertyPreview from '@/components/property-preview';
+import ImageUpload from '@/components/image-upload';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Property, RoomConfig, RoomType, BedroomConfig } from '@/types';
-import { Plus, Edit2, Trash2, Bed, Bath, UtensilsCrossed, Sofa, X, Loader2, Sparkles, Building2 } from 'lucide-react';
+import { Property, RoomConfig, RoomType, BedroomConfig, BedSize } from '@/types';
+import { Plus, Edit2, Trash2, Bed, Bath, Building2, X, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 const roomTypeLabels: Record<RoomType, string> = {
-  bedroom: 'property.rooms.bedroom',
-  bathroom: 'property.rooms.bathroom',
-  kitchen: 'property.rooms.kitchen',
-  livingRoom: 'property.rooms.livingRoom',
-  diningRoom: 'property.rooms.diningRoom',
-  office: 'property.rooms.office',
-  garage: 'property.rooms.garage',
-  patio: 'property.rooms.patio',
-  laundry: 'property.rooms.laundry',
-  other: 'property.rooms.other'
+  bedroom: 'Bedroom',
+  bathroom: 'Bathroom',
+  kitchen: 'Kitchen',
+  livingRoom: 'Living Room',
+  diningRoom: 'Dining Room',
+  office: 'Office',
+  garage: 'Garage',
+  patio: 'Patio',
+  laundry: 'Laundry',
+  other: 'Other'
 };
+
+const bedSizes: BedSize[] = ['king', 'queen', 'full', 'twin', 'twinXL', 'californiaKing'];
+
+const bedSizeLabels: Record<BedSize, string> = {
+  king: 'King',
+  queen: 'Queen',
+  full: 'Full',
+  twin: 'Twin',
+  twinXL: 'Twin XL',
+  californiaKing: 'California King'
+};
+
+const bathroomTypes = ['full', 'half', 'none'] as const;
 
 export default function PropertiesPage() {
   const params = useParams();
@@ -41,6 +55,11 @@ export default function PropertiesPage() {
   const [address, setAddress] = useState('');
   const [rooms, setRooms] = useState<RoomConfig[]>([]);
   const [saving, setSaving] = useState(false);
+  const [mainPhoto, setMainPhoto] = useState('');
+  const [description, setDescription] = useState('');
+  const [bedroomConfig, setBedroomConfig] = useState<BedroomConfig[]>([]);
+  const [bathrooms, setBathrooms] = useState<number>(0);
+  const [halfBathrooms, setHalfBathrooms] = useState<number>(0);
 
   // Enrichment state
   const [enriching, setEnriching] = useState(false);
@@ -51,47 +70,28 @@ export default function PropertiesPage() {
   const isAdmin = profile?.role === 'admin';
 
   useEffect(() => {
-    if (!authLoading && (!user || !isAdmin)) {
-      window.location.href = `/${locale}/dashboard`;
-    }
-  }, [user, profile, authLoading, locale]);
-
-  useEffect(() => {
+    if (!user) return;
     loadProperties();
-  }, []);
+  }, [user]);
 
   const loadProperties = async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'properties'));
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate(),
-        updatedAt: doc.data().updatedAt?.toDate()
-      })) as Property[];
-      setProperties(data);
+      const propertiesSnapshot = await getDocs(collection(db, 'properties'));
+      const propertiesData = propertiesSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate(),
+          updatedAt: data.updatedAt?.toDate()
+        };
+      }) as Property[];
+      
+      setProperties(propertiesData);
     } catch (error) {
       console.error('Error loading properties:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const addRoom = (type: RoomType) => {
-    const existing = rooms.find(r => r.type === type);
-    if (existing) {
-      setRooms(rooms.map(r => r.type === type ? { ...r, count: r.count + 1 } : r));
-    } else {
-      setRooms([...rooms, { type, count: 1 }]);
-    }
-  };
-
-  const removeRoom = (type: RoomType) => {
-    const existing = rooms.find(r => r.type === type);
-    if (existing && existing.count > 1) {
-      setRooms(rooms.map(r => r.type === type ? { ...r, count: r.count - 1 } : r));
-    } else {
-      setRooms(rooms.filter(r => r.type !== type));
     }
   };
 
@@ -101,7 +101,6 @@ export default function PropertiesPage() {
     setEnriching(true);
     
     try {
-      // Fetch enrichment data
       const response = await fetch(
         `/api/property/enrich?action=enrich&address=${encodeURIComponent(selectedAddress)}&placeId=${selectedPlaceId}`
       );
@@ -109,29 +108,19 @@ export default function PropertiesPage() {
       
       if (data.error) {
         console.error('Enrichment error:', data.error);
-        // Still use address without enrichment
         setEnrichedData({ address: selectedAddress });
       } else {
         setEnrichedData(data);
         setName(data.name || selectedAddress.split(',')[0]);
         
-        // Auto-populate rooms based on enrichment
+        // Auto-populate bathrooms
         if (data.bathrooms) {
-          const existing = rooms.find(r => r.type === 'bathroom');
-          if (existing) {
-            setRooms(prev => prev.map(r => r.type === 'bathroom' ? { ...r, count: data.bathrooms } : r));
-          } else {
-            setRooms(prev => [...prev, { type: 'bathroom', count: data.bathrooms }]);
-          }
+          setBathrooms(data.bathrooms);
         }
         
-        if (data.bedrooms) {
-          const existing = rooms.find(r => r.type === 'bedroom');
-          if (existing) {
-            setRooms(prev => prev.map(r => r.type === 'bedroom' ? { ...r, count: data.bedrooms } : r));
-          } else {
-            setRooms(prev => [...prev, { type: 'bedroom', count: data.bedrooms }]);
-          }
+        // Auto-populate bedroom config
+        if (data.bedroomConfig) {
+          setBedroomConfig(data.bedroomConfig);
         }
       }
       
@@ -145,48 +134,51 @@ export default function PropertiesPage() {
     }
   };
 
-  const uploadPhoto = async (photoUrl: string, propertyId: string): Promise<string> => {
-    // For now, just return the original URL
-    // Photo uploads will be handled server-side or via direct storage upload
-    return photoUrl;
-  };
+  const handleSaveProperty = async () => {
+    if (!address.trim()) {
+      alert('Please enter an address');
+      return;
+    }
 
-  const handleConfirmProperty = async (data: Partial<Property>) => {
     setSaving(true);
     
     try {
-      // Create property with basic data
       const propertyData: any = {
-        name: name || (data.address ? data.address.split(',')[0] : 'Untitled Property'),
-        address: address || data.address || '',
-        rooms: rooms,
+        name: name || address.split(',')[0] || 'Untitled Property',
+        address,
+        rooms,
+        mainPhoto: mainPhoto || null,
+        description: description || null,
+        bathrooms,
+        halfBathrooms,
+        bedroomConfig,
         active: true,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        createdBy: user?.uid
+        updatedAt: serverTimestamp()
       };
       
-      // Only add enrichment fields if they exist
-      if (data.enriched !== undefined) propertyData.enriched = data.enriched;
-      if (placeId) propertyData.placeId = placeId;
-      if (data.propertyType) propertyData.propertyType = data.propertyType;
-      if (data.bedrooms) propertyData.bedrooms = data.bedrooms;
-      if (data.bathrooms) propertyData.bathrooms = data.bathrooms;
-      if (data.squareFeet) propertyData.squareFeet = data.squareFeet;
-      if (data.yearBuilt) propertyData.yearBuilt = data.yearBuilt;
-      if (data.bedroomConfig) propertyData.bedroomConfig = data.bedroomConfig;
-      if (data.description) propertyData.description = data.description;
-      if (data.latitude) propertyData.latitude = data.latitude;
-      if (data.longitude) propertyData.longitude = data.longitude;
-      if (data.mainPhoto) propertyData.mainPhoto = data.mainPhoto;
-      if (data.photos) propertyData.photos = data.photos.slice(0, 5);
-      if (data.rentcastData) propertyData.rentcastData = data.rentcastData;
+      // Add enrichment fields if available
+      if (enrichedData) {
+        if (enrichedData.enriched !== undefined) propertyData.enriched = enrichedData.enriched;
+        if (placeId) propertyData.placeId = placeId;
+        if (enrichedData.propertyType) propertyData.propertyType = enrichedData.propertyType;
+        if (enrichedData.bedrooms) propertyData.bedrooms = enrichedData.bedrooms;
+        if (enrichedData.squareFeet) propertyData.squareFeet = enrichedData.squareFeet;
+        if (enrichedData.yearBuilt) propertyData.yearBuilt = enrichedData.yearBuilt;
+        if (enrichedData.latitude) propertyData.latitude = enrichedData.latitude;
+        if (enrichedData.longitude) propertyData.longitude = enrichedData.longitude;
+        if (enrichedData.photos) propertyData.photos = enrichedData.photos.slice(0, 5);
+        if (enrichedData.rentcastData) propertyData.rentcastData = enrichedData.rentcastData;
+      }
       
-      console.log('Saving property:', propertyData);
-      
-      // Save to Firestore
-      const docRef = await addDoc(collection(db, 'properties'), propertyData);
-      console.log('Property saved with ID:', docRef.id);
+      if (editingProperty) {
+        // Update existing property
+        await updateDoc(doc(db, 'properties', editingProperty.id), propertyData);
+      } else {
+        // Create new property
+        propertyData.createdAt = serverTimestamp();
+        propertyData.createdBy = user?.uid;
+        await addDoc(collection(db, 'properties'), propertyData);
+      }
       
       // Reset form
       setShowModal(false);
@@ -196,8 +188,13 @@ export default function PropertiesPage() {
       setAddress('');
       setRooms([]);
       setPlaceId(null);
+      setMainPhoto('');
+      setDescription('');
+      setBedroomConfig([]);
+      setBathrooms(0);
+      setHalfBathrooms(0);
+      setEditingProperty(null);
       
-      // Reload properties
       loadProperties();
     } catch (error) {
       console.error('Error saving property:', error);
@@ -212,6 +209,11 @@ export default function PropertiesPage() {
     setName(property.name);
     setAddress(property.address);
     setRooms(property.rooms || []);
+    setMainPhoto(property.mainPhoto || '');
+    setDescription(property.description || '');
+    setBedroomConfig(property.bedroomConfig || []);
+    setBathrooms(property.bathrooms || 0);
+    setHalfBathrooms(property.halfBathrooms || 0);
     setShowModal(true);
     setShowPreview(false);
     setEnrichedData(null);
@@ -225,6 +227,11 @@ export default function PropertiesPage() {
     setShowPreview(false);
     setEnrichedData(null);
     setPlaceId(null);
+    setMainPhoto('');
+    setDescription('');
+    setBedroomConfig([]);
+    setBathrooms(0);
+    setHalfBathrooms(0);
   };
 
   const handleDelete = async (id: string) => {
@@ -236,6 +243,53 @@ export default function PropertiesPage() {
     } catch (error) {
       console.error('Error deleting property:', error);
     }
+  };
+
+  // Bedroom config helpers
+  const addBedroom = () => {
+    setBedroomConfig([...bedroomConfig, {
+      roomNumber: bedroomConfig.length + 1,
+      name: `Bedroom ${bedroomConfig.length + 1}`,
+      beds: [{ size: 'queen', quantity: 1 }],
+      bathroomType: 'none'
+    }]);
+  };
+
+  const updateBedroom = (index: number, updates: Partial<BedroomConfig>) => {
+    const updated = [...bedroomConfig];
+    updated[index] = { ...updated[index], ...updates };
+    setBedroomConfig(updated);
+  };
+
+  const removeBedroom = (index: number) => {
+    const updated = bedroomConfig.filter((_, i) => i !== index);
+    // Renumber rooms
+    updated.forEach((room, i) => {
+      room.roomNumber = i + 1;
+    });
+    setBedroomConfig(updated);
+  };
+
+  const addBedToRoom = (roomIndex: number) => {
+    const updated = [...bedroomConfig];
+    updated[roomIndex].beds.push({ size: 'queen', quantity: 1 });
+    setBedroomConfig(updated);
+  };
+
+  const updateBed = (roomIndex: number, bedIndex: number, field: 'size' | 'quantity', value: BedSize | number) => {
+    const updated = [...bedroomConfig];
+    if (field === 'size') {
+      updated[roomIndex].beds[bedIndex].size = value as BedSize;
+    } else {
+      updated[roomIndex].beds[bedIndex].quantity = value as number;
+    }
+    setBedroomConfig(updated);
+  };
+
+  const removeBed = (roomIndex: number, bedIndex: number) => {
+    const updated = [...bedroomConfig];
+    updated[roomIndex].beds.splice(bedIndex, 1);
+    setBedroomConfig(updated);
   };
 
   if (authLoading || loading) {
@@ -256,7 +310,7 @@ export default function PropertiesPage() {
           <h1 className="text-2xl font-bold text-gray-900">{t('property.title')}</h1>
           {isAdmin && (
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => { resetForm(); setShowModal(true); }}
               className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
             >
               <Plus className="w-5 h-5" />
@@ -283,8 +337,8 @@ export default function PropertiesPage() {
                   {property.mainPhoto ? (
                     <img src={property.mainPhoto} alt={property.name} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Building2 className="w-12 h-12 text-gray-300" />
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary-100 to-primary-200">
+                      <Building2 className="w-16 h-16 text-primary-400" />
                     </div>
                   )}
                   {property.enriched && (
@@ -296,12 +350,12 @@ export default function PropertiesPage() {
                 
                 <div className="p-4">
                   <div className="flex items-start justify-between">
-                    <div>
+                    <div className="flex-1">
                       <h3 className="font-semibold text-gray-900">{property.name}</h3>
                       <p className="text-sm text-gray-500 mt-1 line-clamp-1">{property.address}</p>
                     </div>
                     {isAdmin && (
-                      <div className="flex gap-1" onClick={e => e.preventDefault()}>
+                      <div className="flex gap-1 ml-2" onClick={e => e.preventDefault()}>
                         <button 
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditModal(property); }}
                           className="p-1.5 hover:bg-gray-100 rounded transition"
@@ -318,39 +372,32 @@ export default function PropertiesPage() {
                     )}
                   </div>
                   
-                  {/* Mini bio */}
-                  {property.description && (
-                    <p className="mt-2 text-sm text-gray-600 line-clamp-2">{property.description}</p>
-                  )}
-                  
-                  {/* Property stats */}
+                  {/* Stats */}
                   <div className="mt-3 flex items-center gap-4 text-sm text-gray-500">
                     <span className="flex items-center gap-1">
                       <Bed className="w-4 h-4" />
-                      {property.bedrooms || '-'}
+                      {property.bedroomConfig?.length || property.bedrooms || '-'}
                     </span>
                     <span className="flex items-center gap-1">
                       <Bath className="w-4 h-4" />
                       {property.bathrooms || '-'}
+                      {property.halfBathrooms ? ` +${property.halfBathrooms}½` : ''}
                     </span>
                     {property.squareFeet && (
                       <span>{property.squareFeet.toLocaleString()} sqft</span>
                     )}
                   </div>
                   
-                  {/* Bedroom configuration summary */}
+                  {/* Bedroom config preview */}
                   {property.bedroomConfig && property.bedroomConfig.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {property.bedroomConfig.slice(0, 3).map((room, i) => (
-                        <span key={i} className="px-2 py-0.5 bg-primary-50 text-primary-700 text-xs rounded">
+                    <div className="mt-2 text-xs text-gray-600">
+                      {property.bedroomConfig.slice(0, 2).map((room, i) => (
+                        <span key={i} className="mr-2">
                           {room.beds.map(b => `${b.quantity}×${b.size}`).join(' + ')}
+                          {room.bathroomType === 'full' ? ' (ensuite)' : room.bathroomType === 'half' ? ' (½ bath)' : ''}
                         </span>
                       ))}
-                      {property.bedroomConfig.length > 3 && (
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
-                          +{property.bedroomConfig.length - 3} more
-                        </span>
-                      )}
+                      {property.bedroomConfig.length > 2 && ` +${property.bedroomConfig.length - 2} more`}
                     </div>
                   )}
                   
@@ -371,12 +418,12 @@ export default function PropertiesPage() {
       </div>
 
       {/* Add/Edit Modal */}
-      {showModal && !showPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b flex items-center justify-between">
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full my-8">
+            <div className="p-6 border-b flex items-center justify-between sticky top-0 bg-white rounded-t-2xl">
               <h2 className="text-xl font-semibold">
-                {editingProperty ? t('property.edit') : t('property.add')}
+                {editingProperty ? 'Edit Property' : 'Add Property'}
               </h2>
               <button 
                 onClick={() => { setShowModal(false); resetForm(); }}
@@ -385,132 +432,206 @@ export default function PropertiesPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
-            <div className="p-6 space-y-4">
-              {/* Address with Autocomplete */}
+
+            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+              {/* Photo Upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('property.address')}
-                </label>
-                <div className="relative">
-                  <AddressAutocomplete
-                    value={address}
-                    onChange={setAddress}
-                    onPlaceSelect={handlePlaceSelect}
-                    placeholder="123 Ocean Dr, Miami FL"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                  {enriching && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 text-primary-600">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-sm">Enriching...</span>
-                    </div>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  Start typing the address to auto-fetch property details
-                </p>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Property Photo</label>
+                <ImageUpload
+                  value={mainPhoto}
+                  onChange={setMainPhoto}
+                  folder="properties"
+                />
               </div>
 
+              {/* Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('property.name')}
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Property Name</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Beach House #1"
+                  placeholder="e.g., Beach House"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
 
-              {/* Manual room configuration (fallback) */}
+              {/* Address */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  {t('property.rooms.title')}
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(Object.keys(roomTypeLabels) as RoomType[]).map(type => {
-                    const count = rooms.find(r => r.type === type)?.count || 0;
-                    return (
-                      <div key={type} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <span className="text-sm">{t(roomTypeLabels[type])}</span>
-                        <div className="flex items-center gap-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
+                {editingProperty ? (
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                ) : (
+                  <AddressAutocomplete
+                    value={address}
+                    onChange={setAddress}
+                    onPlaceSelect={handlePlaceSelect}
+                    placeholder="Start typing address..."
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                )}
+                {enriching && (
+                  <div className="mt-2 flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Fetching property details...
+                  </div>
+                )}
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Property description..."
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Bathrooms */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Bathrooms</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={bathrooms}
+                    onChange={(e) => setBathrooms(parseInt(e.target.value) || 0)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Half Bathrooms</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={halfBathrooms}
+                    onChange={(e) => setHalfBathrooms(parseInt(e.target.value) || 0)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Bedroom Configuration */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Bedroom Configuration</label>
+                  <button
+                    type="button"
+                    onClick={addBedroom}
+                    className="text-sm text-primary-600 hover:text-primary-700"
+                  >
+                    + Add Bedroom
+                  </button>
+                </div>
+
+                {bedroomConfig.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-4 text-center bg-gray-50 rounded-lg">
+                    No bedrooms configured. Click "Add Bedroom" to start.
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    {bedroomConfig.map((room, roomIndex) => (
+                      <div key={roomIndex} className="p-4 bg-gray-50 rounded-lg">
+                        <div className="flex items-center justify-between mb-3">
+                          <input
+                            type="text"
+                            value={room.name || `Bedroom ${room.roomNumber}`}
+                            onChange={(e) => updateBedroom(roomIndex, { name: e.target.value })}
+                            placeholder="Room name"
+                            className="font-medium bg-transparent border-b border-transparent hover:border-gray-300 focus:border-primary-500 focus:outline-none"
+                          />
                           <button
                             type="button"
-                            onClick={() => removeRoom(type)}
-                            className="w-7 h-7 flex items-center justify-center bg-gray-200 rounded hover:bg-gray-300 transition"
-                            disabled={count === 0}
+                            onClick={() => removeBedroom(roomIndex)}
+                            className="text-red-500 hover:text-red-600 text-sm"
                           >
-                            -
-                          </button>
-                          <span className="w-6 text-center">{count}</span>
-                          <button
-                            type="button"
-                            onClick={() => addRoom(type)}
-                            className="w-7 h-7 flex items-center justify-center bg-primary-100 text-primary-700 rounded hover:bg-primary-200 transition"
-                          >
-                            +
+                            Remove
                           </button>
                         </div>
+
+                        {/* Beds */}
+                        <div className="space-y-2 mb-3">
+                          {room.beds.map((bed, bedIndex) => (
+                            <div key={bedIndex} className="flex items-center gap-2">
+                              <select
+                                value={bed.size}
+                                onChange={(e) => updateBed(roomIndex, bedIndex, 'size', e.target.value as BedSize)}
+                                className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                              >
+                                {bedSizes.map(size => (
+                                  <option key={size} value={size}>{bedSizeLabels[size]}</option>
+                                ))}
+                              </select>
+                              <input
+                                type="number"
+                                min="1"
+                                value={bed.quantity}
+                                onChange={(e) => updateBed(roomIndex, bedIndex, 'quantity', parseInt(e.target.value) || 1)}
+                                className="w-20 px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                              />
+                              {room.beds.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeBed(roomIndex, bedIndex)}
+                                  className="text-red-500 hover:text-red-600"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => addBedToRoom(roomIndex)}
+                            className="text-sm text-primary-600 hover:text-primary-700"
+                          >
+                            + Add Bed
+                          </button>
+                        </div>
+
+                        {/* Bathroom type */}
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm text-gray-600">Bathroom:</label>
+                          <select
+                            value={room.bathroomType || 'none'}
+                            onChange={(e) => updateBedroom(roomIndex, { bathroomType: e.target.value as any })}
+                            className="px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                          >
+                            <option value="none">No bathroom</option>
+                            <option value="half">Half bathroom</option>
+                            <option value="full">Full bathroom (ensuite)</option>
+                          </select>
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="p-6 border-t flex gap-3 justify-end">
+            <div className="p-6 border-t flex justify-end gap-3 sticky bottom-0 bg-white rounded-b-2xl">
               <button
                 onClick={() => { setShowModal(false); resetForm(); }}
                 className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
               >
-                {t('common.cancel')}
+                Cancel
               </button>
               <button
-                onClick={() => {
-                  if (enrichedData) {
-                    setShowPreview(true);
-                  } else {
-                    handleConfirmProperty({ address });
-                  }
-                }}
+                onClick={handleSaveProperty}
                 disabled={saving || !address.trim()}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 flex items-center gap-2"
               >
-                {saving ? t('common.loading') : enrichedData ? (
-                  <span className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4" />
-                    Preview & Create
-                  </span>
-                ) : t('common.save')}
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {editingProperty ? 'Update Property' : 'Create Property'}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Preview Modal */}
-      {showModal && showPreview && enrichedData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Review Property</h2>
-              <button 
-                onClick={() => { setShowPreview(false); }}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-6">
-              <PropertyPreview
-                data={{ ...enrichedData, name, address }}
-                onConfirm={handleConfirmProperty}
-                loading={saving}
-              />
             </div>
           </div>
         </div>
