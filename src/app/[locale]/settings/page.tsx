@@ -9,6 +9,7 @@ import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { updateProfile, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { useNotifications } from '@/lib/use-notifications';
 import { User, Mail, Lock, Globe, Bell, Shield, Check, AlertCircle } from 'lucide-react';
 
 interface UserSettings {
@@ -51,6 +52,7 @@ export default function SettingsPage() {
   const [passwordError, setPasswordError] = useState('');
 
   const isAdmin = profile?.role === 'admin';
+  const { settings: notifSettings, enablePush, disablePush, updateSettings: updateNotifSettings, permissionStatus } = useNotifications();
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -65,13 +67,13 @@ export default function SettingsPage() {
         email: profile.email || '',
         language: locale,
         notifications: {
-          email: true,
-          push: true
+          email: notifSettings.emailEnabled,
+          push: notifSettings.pushEnabled
         }
       });
       setLoading(false);
     }
-  }, [profile, locale]);
+  }, [profile, locale, notifSettings]);
 
   const handleSave = async () => {
     if (!user) return;
@@ -314,16 +316,40 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium text-gray-900">Push Notifications</p>
-                <p className="text-sm text-gray-500">Receive push notifications on your device</p>
+                <p className="text-sm text-gray-500">
+                  {permissionStatus === 'granted' 
+                    ? 'Receive push notifications on your device'
+                    : permissionStatus === 'denied'
+                    ? 'Push notifications blocked. Enable in browser settings.'
+                    : 'Enable push notifications for real-time alerts'}
+                </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
                   checked={settings.notifications.push}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    notifications: { ...settings.notifications, push: e.target.checked }
-                  })}
+                  disabled={permissionStatus === 'denied'}
+                  onChange={async (e) => {
+                    if (e.target.checked) {
+                      const success = await enablePush();
+                      if (success) {
+                        setSettings({
+                          ...settings,
+                          notifications: { ...settings.notifications, push: true }
+                        });
+                        setMessage({ type: 'success', text: 'Push notifications enabled!' });
+                      } else {
+                        setMessage({ type: 'error', text: 'Failed to enable push notifications. Please allow in browser.' });
+                      }
+                    } else {
+                      await disablePush();
+                      setSettings({
+                        ...settings,
+                        notifications: { ...settings.notifications, push: false }
+                      });
+                      setMessage({ type: 'success', text: 'Push notifications disabled.' });
+                    }
+                  }}
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
