@@ -10,7 +10,7 @@ import PropertyPreview from '@/components/property-preview';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Property, RoomConfig, RoomType, BedroomConfig } from '@/types';
-import { Plus, Edit2, Trash2, Bed, Bath, UtensilsCrossed, Sofa, X, Loader2, Sparkles } from 'lucide-react';
+import { Plus, Edit2, Trash2, Bed, Bath, UtensilsCrossed, Sofa, X, Loader2, Sparkles, Building2 } from 'lucide-react';
 import Link from 'next/link';
 
 const roomTypeLabels: Record<RoomType, string> = {
@@ -273,63 +273,84 @@ export default function PropertiesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {properties.map(property => (
-              <div key={property.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
-                {property.mainPhoto && (
-                  <div className="h-40 bg-gray-100">
+              <Link
+                key={property.id}
+                href={`/${locale}/properties/${property.id}`}
+                className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition"
+              >
+                {/* Property Image */}
+                <div className="h-40 bg-gray-100 relative">
+                  {property.mainPhoto ? (
                     <img src={property.mainPhoto} alt={property.name} className="w-full h-full object-cover" />
-                  </div>
-                )}
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Building2 className="w-12 h-12 text-gray-300" />
+                    </div>
+                  )}
+                  {property.enriched && (
+                    <span className="absolute top-2 right-2 px-2 py-1 text-xs font-medium rounded-full bg-blue-500 text-white">
+                      Enriched
+                    </span>
+                  )}
+                </div>
+                
                 <div className="p-4">
                   <div className="flex items-start justify-between">
                     <div>
                       <h3 className="font-semibold text-gray-900">{property.name}</h3>
                       <p className="text-sm text-gray-500 mt-1 line-clamp-1">{property.address}</p>
                     </div>
-                    <div className="flex gap-1">
-                      <button 
-                        onClick={() => openEditModal(property)}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition"
-                      >
-                        <Edit2 className="w-4 h-4 text-gray-600" />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(property.id)}
-                        className="p-2 hover:bg-red-50 rounded-lg transition"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </div>
+                    {isAdmin && (
+                      <div className="flex gap-1" onClick={e => e.preventDefault()}>
+                        <button 
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditModal(property); }}
+                          className="p-1.5 hover:bg-gray-100 rounded transition"
+                        >
+                          <Edit2 className="w-4 h-4 text-gray-600" />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(property.id); }}
+                          className="p-1.5 hover:bg-red-50 rounded transition"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
-                  {/* Property stats */}
-                  {(property.bedrooms || property.bathrooms || property.squareFeet) && (
-                    <div className="mt-3 flex items-center gap-4 text-sm text-gray-500">
-                      {property.bedrooms && (
-                        <span className="flex items-center gap-1">
-                          <Bed className="w-4 h-4" />
-                          {property.bedrooms} bd
-                        </span>
-                      )}
-                      {property.bathrooms && (
-                        <span className="flex items-center gap-1">
-                          <Bath className="w-4 h-4" />
-                          {property.bathrooms} ba
-                        </span>
-                      )}
-                      {property.squareFeet && (
-                        <span>{property.squareFeet.toLocaleString()} sqft</span>
-                      )}
-                    </div>
+                  {/* Mini bio */}
+                  {property.description && (
+                    <p className="mt-2 text-sm text-gray-600 line-clamp-2">{property.description}</p>
                   )}
                   
-                  {/* Room config fallback */}
-                  {(!property.bedrooms && !property.bathrooms) && property.rooms && property.rooms.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {property.rooms.map((room, i) => (
-                        <span key={i} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
-                          {room.count} {t(roomTypeLabels[room.type])}
+                  {/* Property stats */}
+                  <div className="mt-3 flex items-center gap-4 text-sm text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <Bed className="w-4 h-4" />
+                      {property.bedrooms || '-'}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Bath className="w-4 h-4" />
+                      {property.bathrooms || '-'}
+                    </span>
+                    {property.squareFeet && (
+                      <span>{property.squareFeet.toLocaleString()} sqft</span>
+                    )}
+                  </div>
+                  
+                  {/* Bedroom configuration summary */}
+                  {property.bedroomConfig && property.bedroomConfig.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {property.bedroomConfig.slice(0, 3).map((room, i) => (
+                        <span key={i} className="px-2 py-0.5 bg-primary-50 text-primary-700 text-xs rounded">
+                          {room.beds.map(b => `${b.quantity}×${b.size}`).join(' + ')}
                         </span>
                       ))}
+                      {property.bedroomConfig.length > 3 && (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
+                          +{property.bedroomConfig.length - 3} more
+                        </span>
+                      )}
                     </div>
                   )}
                   
@@ -339,24 +360,11 @@ export default function PropertiesPage() {
                         ? 'bg-green-100 text-green-700' 
                         : 'bg-gray-100 text-gray-600'
                     }`}>
-                      {property.active ? t('property.active') : t('property.inactive')}
+                      {property.active ? 'Active' : 'Inactive'}
                     </span>
-                    {property.enriched && (
-                      <span className="ml-2 inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
-                        Enriched
-                      </span>
-                    )}
                   </div>
-
-                  {/* Walkthrough Link */}
-                  <Link
-                    href={`/${locale}/properties/${property.id}/walkthrough`}
-                    className="mt-3 block w-full text-center py-2 px-4 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition text-sm font-medium"
-                  >
-                    Configure Walkthrough
-                  </Link>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
