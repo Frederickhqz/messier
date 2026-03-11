@@ -5,8 +5,15 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Messier - Property Housekeeping',
-  description: 'Property housekeeping management for overnight rentals',
+  title: {
+    default: 'Messier - Property Housekeeping',
+    template: '%s | Messier'
+  },
+  description: 'Professional housekeeping management for vacation rentals, Airbnb properties, and short-term stays. Track cleanings, manage teams, and streamline operations.',
+  keywords: ['housekeeping', 'property management', 'vacation rental', 'airbnb', 'cleaning', 'short-term rental', 'hospitality'],
+  authors: [{ name: 'Messier' }],
+  creator: 'Messier',
+  publisher: 'Messier',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -15,6 +22,28 @@ export const metadata: Metadata = {
   },
   formatDetection: {
     telephone: false
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: 'https://messier.app',
+    siteName: 'Messier',
+    title: 'Messier - Property Housekeeping',
+    description: 'Professional housekeeping management for vacation rentals and short-term stays',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Messier - Property Housekeeping'
+      }
+    ]
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Messier - Property Housekeeping',
+    description: 'Professional housekeeping management for vacation rentals and short-term stays',
+    images: ['/og-image.png']
   },
   icons: {
     icon: [
@@ -48,6 +77,8 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body className={inter.className}>{children}</body>
     </html>

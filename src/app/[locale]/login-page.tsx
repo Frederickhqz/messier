@@ -56,10 +56,18 @@ export default function LoginPage({ locale }: { locale: string }) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100 p-4">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl shadow-xl">
+      <div className="max-w-md w-full space-y-6 bg-white p-8 rounded-2xl shadow-xl">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-primary-600">{t('app.name')}</h1>
-          <p className="mt-2 text-gray-600">{t('app.tagline')}</p>
+          {/* Logo */}
+          <div className="mx-auto w-16 h-16 mb-4">
+            <svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="512" height="512" rx="108" fill="#0ea5e9"/>
+              <path d="M256 110L115 220V370C115 385.464 127.536 398 143 398H210V295C210 284.507 218.507 276 229 276H283C293.493 276 302 284.507 302 295V398H369C384.464 398 397 385.464 397 370V220L256 110Z" fill="white"/>
+              <rect x="227" y="302" width="58" height="96" rx="6" fill="#0ea5e9"/>
+            </svg>
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900">Messier</h1>
+          <p className="mt-2 text-gray-600">Property Housekeeping</p>
         </div>
         
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>

@@ -62,7 +62,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-lg hover:bg-gray-100">
           <Menu className="w-6 h-6" />
         </button>
-        <h1 className="font-bold text-primary-600">{t('app.name')}</h1>
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 512 512" className="w-7 h-7" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="512" height="512" rx="108" fill="#0ea5e9"/>
+            <path d="M256 110L115 220V370C115 385.464 127.536 398 143 398H210V295C210 284.507 218.507 276 229 276H283C293.493 276 302 284.507 302 295V398H369C384.464 398 397 385.464 397 370V220L256 110Z" fill="white"/>
+            <rect x="227" y="302" width="58" height="96" rx="6" fill="#0ea5e9"/>
+          </svg>
+          <span className="font-bold text-gray-900">Messier</span>
+        </div>
         <div className="w-10" />
       </div>
 
@@ -82,7 +89,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       `}>
         <div className="p-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-primary-600">{t('app.name')}</h1>
+            <div className="flex items-center gap-3">
+              <svg viewBox="0 0 512 512" className="w-8 h-8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="512" height="512" rx="108" fill="#0ea5e9"/>
+                <path d="M256 110L115 220V370C115 385.464 127.536 398 143 398H210V295C210 284.507 218.507 276 229 276H283C293.493 276 302 284.507 302 295V398H369C384.464 398 397 385.464 397 370V220L256 110Z" fill="white"/>
+                <rect x="227" y="302" width="58" height="96" rx="6" fill="#0ea5e9"/>
+              </svg>
+              <span className="text-xl font-bold text-gray-900">Messier</span>
+            </div>
             <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 hover:bg-gray-100 rounded">
               <X className="w-5 h-5" />
             </button>
